@@ -13,9 +13,13 @@ const emit = defineEmits<{ "update:value": [value: MappingRow[]] }>();
       <label class="field-label">{{ sourceLabel }}<NInput :value="row.source" :placeholder="sourceLabel" :disabled="disabled" :maxlength="2048" @update:value="emit('update:value', value.map((item, i) => i === index ? { ...item, source: $event } : item))" /></label>
       <span class="arrow" aria-hidden="true">→</span>
       <label class="field-label">{{ targetLabel }}<NInput :value="row.target" :placeholder="targetLabel" :disabled="disabled" :maxlength="2048" @update:value="emit('update:value', value.map((item, i) => i === index ? { ...item, target: $event } : item))" /></label>
-      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除映射 ${index + 1}`" @click="emit('update:value', value.filter((_, i) => i !== index))">移除</NButton>
+      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除映射 ${index + 1}`" @click="emit('update:value', value.filter((_, i) => i !== index))">
+        移除
+      </NButton>
     </div>
-    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || value.length >= max" @click="emit('update:value', [...value, { source: '', target: '' }])">＋ 添加映射</NButton>
+    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || value.length >= max" @click="emit('update:value', [...value, { source: '', target: '' }])">
+      ＋ 添加映射
+    </NButton>
   </div>
 </template>
 <style scoped>

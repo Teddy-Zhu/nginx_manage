@@ -180,7 +180,9 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           查看网站正在使用的证书，并将续期后的证书更新到网站。
         </p>
       </div>
-      <n-button :loading="busy" @click="load">刷新</n-button>
+      <n-button :loading="busy" @click="load">
+        刷新
+      </n-button>
     </div>
     <section class="surface cert-section">
       <div>
@@ -198,11 +200,13 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
         clearable
         @update:value="choose"
       />
-      <n-empty v-if="!items.length && !busy" description="还没有可用证书"
-        ><template #extra
-          ><router-link to="/certificates">前往获取证书</router-link></template
-        ></n-empty
-      >
+      <n-empty v-if="!items.length && !busy" description="还没有可用证书">
+        <template #extra>
+          <router-link to="/certificates">
+            前往获取证书
+          </router-link>
+        </template>
+      </n-empty>
     </section>
     <template v-if="certificate && status">
       <section class="surface cert-section">
@@ -211,7 +215,8 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           <n-tag
             :bordered="false"
             :type="status.state === 'applied' ? 'success' : 'warning'"
-            >{{
+          >
+            {{
               status.state === "applied"
                 ? "网站已使用当前证书"
                 : status.state === "unbound"
@@ -219,8 +224,8 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
                   : status.state === "partial"
                     ? "部分网站待更新"
                     : "网站证书待更新"
-            }}</n-tag
-          >
+            }}
+          </n-tag>
         </div>
         <n-alert
           v-if="
@@ -230,19 +235,22 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           "
           type="warning"
           :bordered="false"
-          >当前为测试证书，浏览器不会信任。</n-alert
         >
-        <template v-if="!certificate.bindings.length"
-          ><p class="muted">
+          当前为测试证书，浏览器不会信任。
+        </n-alert>
+        <template v-if="!certificate.bindings.length">
+          <p class="muted">
             此证书尚未用于网站。前往网站设置，选择站点并设置 HTTPS
             证书，保存并应用后生效。
           </p>
           <div class="cert-actions">
-            <router-link to="/nginx"
-              ><n-button type="primary">前往网站设置</n-button></router-link
-            >
-          </div></template
-        >
+            <router-link to="/nginx">
+              <n-button type="primary">
+                前往网站设置
+              </n-button>
+            </router-link>
+          </div>
+        </template>
         <template v-else>
           <p class="muted">
             更新会同步替换使用此证书的网站配置，完成后请检查网站访问结果。
@@ -253,10 +261,11 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
               type="primary"
               :disabled="busy || !!preview"
               @click="prepare"
-              >检查可更新的网站</n-button
-            ><router-link to="/nginx"
-              ><n-button>管理网站</n-button></router-link
             >
+              检查可更新的网站
+            </n-button><router-link to="/nginx">
+              <n-button>管理网站</n-button>
+            </router-link>
           </div>
         </template>
       </section>
@@ -265,17 +274,21 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
         <p v-if="!preview.changes.length" class="muted">
           已保存的网站配置均使用当前证书，无需替换。尚未生效的配置请前往网站设置应用。
         </p>
-        <template v-else
-          ><p>将为以下网站更新证书并应用配置：</p>
+        <template v-else>
+          <p>将为以下网站更新证书并应用配置：</p>
           <div class="cert-actions">
-            <n-tag v-for="site in changedSites" :key="site">{{ site }}</n-tag>
+            <n-tag v-for="site in changedSites" :key="site">
+              {{ site }}
+            </n-tag>
           </div>
           <div class="cert-form-footer">
-            <n-button type="primary" :loading="busy" @click="deploy"
-              >确认更新</n-button
-            ><n-button :disabled="busy" @click="preview = null">取消</n-button>
-          </div></template
-        >
+            <n-button type="primary" :loading="busy" @click="deploy">
+              确认更新
+            </n-button><n-button :disabled="busy" @click="preview = null">
+              取消
+            </n-button>
+          </div>
+        </template>
       </section>
       <section v-if="bindingGroups.length" class="surface cert-section">
         <h2>网站使用情况</h2>
@@ -285,18 +298,18 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           class="cert-record"
         >
           <div class="cert-heading">
-            <span>{{ binding.name }}</span
-            ><n-tag
+            <span>{{ binding.name }}</span><n-tag
               :bordered="false"
               :type="binding.applied && binding.current ? 'success' : 'warning'"
-              >{{
+            >
+              {{
                 !binding.current
                   ? "待更新证书"
                   : binding.applied
                     ? "已应用"
                     : "待应用配置"
-              }}</n-tag
-            >
+              }}
+            </n-tag>
           </div>
         </div>
         <p v-if="certificate.bindings_truncated" class="muted">
@@ -315,20 +328,23 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           class="cert-record"
         >
           <div class="cert-heading">
-            <span
-              >{{ task.automatic ? "自动更新" : "手动更新" }} ·
-              {{ date(task.created_at) }}</span
-            ><n-tag :bordered="false">{{
-              taskStates[task.state] ?? "处理中"
-            }}</n-tag>
+            <span>{{ task.automatic ? "自动更新" : "手动更新" }} ·
+              {{ date(task.created_at) }}</span><n-tag :bordered="false">
+              {{
+                taskStates[task.state] ?? "处理中"
+              }}
+            </n-tag>
           </div>
-          <p v-if="task.last_error" class="error">{{ task.last_error }}</p>
+          <p v-if="task.last_error" class="error">
+            {{ task.last_error }}
+          </p>
           <div>
             <n-button
               quaternary
               @click="inspectTask(task.task_id, '网站证书更新日志')"
-              >查看日志</n-button
             >
+              查看日志
+            </n-button>
           </div>
         </article>
       </section>

@@ -40,15 +40,21 @@ function setOptions(row: Listener, value: string[]) {
 }
 </script>
 <template>
-  <NAlert v-if="error" type="warning">{{ error }}</NAlert>
+  <NAlert v-if="error" type="warning">
+    {{ error }}
+  </NAlert>
   <div v-else class="field-list">
     <div v-for="(row, index) in rows" :key="index" class="listener-row field-row">
       <label class="field-label">监听地址<NInput v-model:value="row.address" placeholder="全部网卡，可填 IPv4 / IPv6" :disabled="disabled" @update:value="update" /></label>
       <label class="field-label">端口<NInputNumber v-model:value="row.port" :min="1" :max="65535" :precision="0" placeholder="端口" :disabled="disabled" @update:value="update" /></label>
       <label class="field-label listener-options">监听选项<NSelect :value="row.options" multiple :options="options" :disabled="disabled" placeholder="普通监听" @update:value="setOptions(row, $event)" /></label>
-      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除监听 ${index + 1}`" @click="remove(index)">移除</NButton>
+      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除监听 ${index + 1}`" @click="remove(index)">
+        移除
+      </NButton>
     </div>
-    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ address: '', port: null, options: [] })">＋ 添加监听</NButton>
+    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ address: '', port: null, options: [] })">
+      ＋ 添加监听
+    </NButton>
   </div>
 </template>
 <style scoped>

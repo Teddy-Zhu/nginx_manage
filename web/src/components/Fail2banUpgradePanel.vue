@@ -324,15 +324,19 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   <section class="panel page-stack">
     <div class="toolbar">
       <h3>更新 Fail2ban</h3>
-      <NButton size="small" :disabled="busy" :loading="reading" @click="refresh"
-        >刷新任务</NButton
-      >
+      <NButton size="small" :disabled="busy" :loading="reading" @click="refresh">
+        刷新任务
+      </NButton>
     </div>
     <p>
       选择已准备的更新版本，完成检查和准备后确认升级。仅支持正在运行的独立受管实例。
     </p>
-    <NAlert v-if="!moduleEnabled" type="warning">请先开启登录防护。</NAlert>
-    <NAlert v-if="!permitted" type="info">当前账户没有更新软件的权限。</NAlert>
+    <NAlert v-if="!moduleEnabled" type="warning">
+      请先开启登录防护。
+    </NAlert>
+    <NAlert v-if="!permitted" type="info">
+      当前账户没有更新软件的权限。
+    </NAlert>
     <NFormItem label="更新版本">
       <NSelect
         v-model:value="selected"
@@ -346,42 +350,59 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         :disabled="!available || !chosen"
         :loading="busy && pending?.input.action === 'check'"
         @click="check"
-        >检查更新</NButton
       >
-      <NButton :loading="assetsReading" @click="loadAssets">刷新版本</NButton>
-      <RouterLink to="/components">准备组件</RouterLink>
+        检查更新
+      </NButton>
+      <NButton :loading="assetsReading" @click="loadAssets">
+        刷新版本
+      </NButton>
+      <RouterLink to="/components">
+        准备组件
+      </RouterLink>
     </div>
-    <NAlert v-if="assetsError" type="error">{{ assetsError }}</NAlert>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
+    <NAlert v-if="assetsError" type="error">
+      {{ assetsError }}
+    </NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
     <NButton
       v-if="pending"
       :disabled="reading"
       :loading="busy"
       @click="() => submit()"
-      >核对并重试原请求</NButton
     >
+      核对并重试原请求
+    </NButton>
     <section v-if="plan" class="surface page-stack">
       <h4>{{ plan.source_version }} → {{ plan.candidate_version }}</h4>
       <p>检查时间：{{ new Date(plan.at * 1000).toLocaleString() }}</p>
       <p>防护规则：{{ plan.jails.join("、") || "无" }}</p>
-      <p v-if="plan.bans">检查时未过期封禁：{{ plan.bans.count }}</p>
+      <p v-if="plan.bans">
+        检查时未过期封禁：{{ plan.bans.count }}
+      </p>
 
-      <NAlert v-if="!plan.running" type="warning"
-        >请先启动防护服务，再进行更新。</NAlert
-      >
-      <NAlert v-if="!plan.scope_verified" type="warning"
-        >暂时无法确认防护规则，请刷新后重试。</NAlert
-      >
-      <NAlert v-for="blocker in plan.blockers" :key="blocker" type="warning">{{
-        blocker
-      }}</NAlert>
+      <NAlert v-if="!plan.running" type="warning">
+        请先启动防护服务，再进行更新。
+      </NAlert>
+      <NAlert v-if="!plan.scope_verified" type="warning">
+        暂时无法确认防护规则，请刷新后重试。
+      </NAlert>
+      <NAlert v-for="blocker in plan.blockers" :key="blocker" type="warning">
+        {{
+          blocker
+        }}
+      </NAlert>
       <NButton
         :disabled="!canPrepare"
         :loading="busy && pending?.input.action === 'prepare'"
         @click="prepare"
-        >准备更新</NButton
       >
+        准备更新
+      </NButton>
     </section>
     <section v-if="preparation" class="surface page-stack">
       <h4>已准备好更新</h4>
@@ -389,26 +410,35 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         {{ preparation.source_version }} → {{ preparation.candidate_version }} ·
         {{ new Date(preparation.created_at * 1000).toLocaleString() }}
       </p>
-      <NAlert type="warning"
-        >更新期间登录防护会短暂中断。更新失败时将尝试恢复原版本，请在完成后确认防护状态。</NAlert
-      >
+      <NAlert type="warning">
+        更新期间登录防护会短暂中断。更新失败时将尝试恢复原版本，请在完成后确认防护状态。
+      </NAlert>
       <NPopconfirm :disabled="!canRun" @positive-click="run">
-        <template #trigger
-          ><NButton
+        <template #trigger>
+          <NButton
             type="warning"
             :disabled="!canRun"
             :loading="busy && pending?.input.action === 'run'"
-            >确认升级</NButton
-          ></template
-        >
+          >
+            确认升级
+          </NButton>
+        </template>
         确认将 Fail2ban 从 {{ preparation.source_version }} 升级至
         {{ preparation.candidate_version }}？
       </NPopconfirm>
-      <p v-if="usedPreparation">已提交更新，请查看更新结果。</p>
+      <p v-if="usedPreparation">
+        已提交更新，请查看更新结果。
+      </p>
     </section>
-    <NAlert v-if="historyError" type="error">{{ historyError }}</NAlert>
-    <p v-if="active">正在处理更新，请稍候。</p>
-    <p v-if="loaded && !tasks.length">暂无升级操作记录。</p>
+    <NAlert v-if="historyError" type="error">
+      {{ historyError }}
+    </NAlert>
+    <p v-if="active">
+      正在处理更新，请稍候。
+    </p>
+    <p v-if="loaded && !tasks.length">
+      暂无升级操作记录。
+    </p>
     <article v-for="task in tasks" :key="task.id" class="surface page-stack">
       <p>
         {{ actions[task.input.action] }} ·
@@ -417,8 +447,12 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
       </p>
       <TaskLogButton :task-id="task.id" />
 
-      <p v-if="stages[task.stage]">{{ stages[task.stage] }}</p>
-      <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
+      <p v-if="stages[task.stage]">
+        {{ stages[task.stage] }}
+      </p>
+      <NAlert v-if="task.error" type="warning">
+        {{ task.error }}
+      </NAlert>
     </article>
     <p>显示最近 16 次升级操作。</p>
   </section>

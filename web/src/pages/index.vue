@@ -129,34 +129,36 @@ useLiveRefresh(
   <div class="page-stack">
     <div class="toolbar">
       <h2>服务器概况</h2>
-      <NButton :loading="loading" @click="reload">刷新</NButton>
+      <NButton :loading="loading" @click="reload">
+        刷新
+      </NButton>
     </div>
-    <NAlert v-if="errors.length" type="warning" title="部分状态暂时无法读取"
-      >其他功能仍可使用，请稍后刷新。</NAlert
-    >
+    <NAlert v-if="errors.length" type="warning" title="部分状态暂时无法读取">
+      其他功能仍可使用，请稍后刷新。
+    </NAlert>
     <NAlert
       v-if="capabilities && capabilities.mode !== 'connected'"
       type="warning"
       title="服务器管理服务未连接"
-      >请检查面板服务是否正常运行。</NAlert
     >
+      请检查面板服务是否正常运行。
+    </NAlert>
     <NAlert
       v-if="
         notifications &&
-        (notifications.health.failed ||
-          notifications.health.reason ||
-          notifications.health.dropped_deliveries)
+          (notifications.health.failed ||
+            notifications.health.reason ||
+            notifications.health.dropped_deliveries)
       "
       type="warning"
-      >有通知未能正常发送，<RouterLink to="/notifications"
-        >查看通知记录</RouterLink
-      >。</NAlert
     >
+      有通知未能正常发送，<RouterLink to="/notifications">
+        查看通知记录
+      </RouterLink>。
+    </NAlert>
     <div class="stat-grid">
       <div class="stat-card">
-        <span class="stat-label">CPU 使用率</span
-        ><strong>{{ metric("cpu", "usage_percent") }}</strong
-        ><span class="stat-hint">{{
+        <span class="stat-label">CPU 使用率</span><strong>{{ metric("cpu", "usage_percent") }}</strong><span class="stat-hint">{{
           monitoring?.stale
             ? "数据已过期"
             : monitoring?.sample
@@ -165,58 +167,56 @@ useLiveRefresh(
         }}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">内存使用率</span
-        ><strong>{{ metric("memory", "used_percent") }}</strong
-        ><RouterLink to="/server">查看系统监控</RouterLink>
+        <span class="stat-label">内存使用率</span><strong>{{ metric("memory", "used_percent") }}</strong><RouterLink to="/server">
+          查看系统监控
+        </RouterLink>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Nginx</span><strong>{{ nginxLabel }}</strong
-        ><RouterLink
+        <span class="stat-label">Nginx</span><strong>{{ nginxLabel }}</strong><RouterLink
           v-if="softwareState === 'missing'"
           :to="{ path: '/components', query: { software: 'nginx' } }"
-          >前往安装</RouterLink
-        ><RouterLink v-else-if="softwareState === 'installed'" to="/nginx"
-          >管理网站</RouterLink
-        ><span v-else class="stat-hint">请刷新重试</span>
+        >
+          前往安装
+        </RouterLink><RouterLink v-else-if="softwareState === 'installed'" to="/nginx">
+          管理网站
+        </RouterLink><span v-else class="stat-hint">请刷新重试</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">待处理问题</span
-        ><strong>{{
+        <span class="stat-label">待处理问题</span><strong>{{
           tasks
             ? tasks.filter((task) =>
-                ["failed", "recovery_required"].includes(task.state),
-              ).length
+              ["failed", "recovery_required"].includes(task.state),
+            ).length
             : "—"
-        }}</strong
-        ><RouterLink to="/tasks">查看操作记录</RouterLink>
+        }}</strong><RouterLink to="/tasks">
+          查看操作记录
+        </RouterLink>
       </div>
     </div>
     <section class="panel page-stack">
       <h2>常用操作</h2>
       <div class="shortcut-grid">
-        <RouterLink to="/nginx"
-          ><strong>网站管理</strong
-          ><span class="muted">管理域名、网站和反向代理</span></RouterLink
-        >
-        <RouterLink to="/certificates"
-          ><strong>证书管理</strong
-          ><span class="muted">申请和更新网站证书</span></RouterLink
-        >
-        <RouterLink to="/firewall-rules"
-          ><strong>防火墙</strong
-          ><span class="muted">管理端口和访问规则</span></RouterLink
-        >
-        <RouterLink to="/components"
-          ><strong>软件商店</strong
-          ><span class="muted">安装所需软件</span></RouterLink
-        >
+        <RouterLink to="/nginx">
+          <strong>网站管理</strong><span class="muted">管理域名、网站和反向代理</span>
+        </RouterLink>
+        <RouterLink to="/certificates">
+          <strong>证书管理</strong><span class="muted">申请和更新网站证书</span>
+        </RouterLink>
+        <RouterLink to="/firewall-rules">
+          <strong>防火墙</strong><span class="muted">管理端口和访问规则</span>
+        </RouterLink>
+        <RouterLink to="/components">
+          <strong>软件商店</strong><span class="muted">安装所需软件</span>
+        </RouterLink>
       </div>
     </section>
     <div class="two-columns">
       <section class="surface">
         <div class="section-heading">
           <h2>系统信息</h2>
-          <RouterLink to="/server">系统监控</RouterLink>
+          <RouterLink to="/server">
+            系统监控
+          </RouterLink>
         </div>
         <dl v-if="capabilities?.host" class="detail-list">
           <dt>操作系统</dt>
@@ -226,12 +226,16 @@ useLiveRefresh(
           <dt>内核版本</dt>
           <dd>{{ capabilities.host.kernel }}</dd>
         </dl>
-        <p v-else class="muted">暂时无法读取系统信息</p>
+        <p v-else class="muted">
+          暂时无法读取系统信息
+        </p>
       </section>
       <section class="surface">
         <div class="section-heading">
           <h2>最近任务</h2>
-          <RouterLink to="/tasks">全部记录</RouterLink>
+          <RouterLink to="/tasks">
+            全部记录
+          </RouterLink>
         </div>
         <NDataTable
           :columns="columns"

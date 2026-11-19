@@ -29,9 +29,19 @@ useLiveRefresh(api, ["version"], check, () => reading.value);
 <template>
   <NAlert v-if="changed" class="version-notice" type="info">
     页面有新版本。保存当前修改后可重新载入。
-    <NPopconfirm @positive-click="reload"><template #trigger><NButton size="small">重新载入</NButton></template>重新载入会丢弃未保存的修改，是否继续？</NPopconfirm>
+    <NPopconfirm @positive-click="reload">
+      <template #trigger>
+        <NButton size="small">
+          重新载入
+        </NButton>
+      </template>重新载入会丢弃未保存的修改，是否继续？
+    </NPopconfirm>
   </NAlert>
-  <NAlert v-else-if="error" class="version-notice" type="warning">无法检查页面版本：{{ error }}<NButton size="small" @click="check">重试</NButton></NAlert>
+  <NAlert v-else-if="error" class="version-notice" type="warning">
+    无法检查页面版本：{{ error }}<NButton size="small" @click="check">
+      重试
+    </NButton>
+  </NAlert>
 </template>
 
 <style scoped>

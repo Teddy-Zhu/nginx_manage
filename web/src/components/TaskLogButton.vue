@@ -11,6 +11,7 @@ const route = useRoute();
   <NButton
     size="small"
     @click="inspectTask(taskId, title, !!route.meta.localOnly)"
-    >查看日志</NButton
   >
+    查看日志
+  </NButton>
 </template>

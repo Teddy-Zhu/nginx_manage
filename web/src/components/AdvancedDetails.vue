@@ -11,6 +11,8 @@ function toggle(event: Event) {
 <template>
   <details class="advanced-details" @toggle="toggle">
     <summary>{{ title }}</summary>
-    <div v-if="expanded" class="advanced-content"><slot /></div>
+    <div v-if="expanded" class="advanced-content">
+      <slot />
+    </div>
   </details>
 </template>

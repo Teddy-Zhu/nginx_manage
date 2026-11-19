@@ -308,13 +308,17 @@ onUnmounted(() => {
         <li>
           <div>
             <h2>获取证书</h2>
-            <p class="muted">自动申请，或导入已有证书。</p>
+            <p class="muted">
+              自动申请，或导入已有证书。
+            </p>
           </div>
         </li>
         <li>
           <div>
             <h2>用于网站</h2>
-            <p class="muted">在网站设置中选择证书，保存并应用。</p>
+            <p class="muted">
+              在网站设置中选择证书，保存并应用。
+            </p>
           </div>
         </li>
         <li>
@@ -331,19 +335,24 @@ onUnmounted(() => {
       <div class="cert-heading">
         <div>
           <h2>我的证书</h2>
-          <p class="muted">共 {{ items.length }} 张证书</p>
+          <p class="muted">
+            共 {{ items.length }} 张证书
+          </p>
         </div>
         <div class="cert-actions">
-          <n-button :loading="busy" @click="load">刷新</n-button>
-          <n-button :disabled="busy" @click="startImport(null)"
-            >导入证书</n-button
-          >
+          <n-button :loading="busy" @click="load">
+            刷新
+          </n-button>
+          <n-button :disabled="busy" @click="startImport(null)">
+            导入证书
+          </n-button>
           <router-link
             :to="{ path: '/certificate-requests', query: { new: '1' } }"
-            ><n-button type="primary" :disabled="busy"
-              >申请证书</n-button
-            ></router-link
           >
+            <n-button type="primary" :disabled="busy">
+              申请证书
+            </n-button>
+          </router-link>
         </div>
       </div>
       <n-data-table
@@ -369,7 +378,9 @@ onUnmounted(() => {
       <div class="cert-heading">
         <div>
           <h2>{{ selected.name }}</h2>
-          <p v-if="selected.notes" class="muted">{{ selected.notes }}</p>
+          <p v-if="selected.notes" class="muted">
+            {{ selected.notes }}
+          </p>
         </div>
         <div class="cert-actions">
           <router-link
@@ -377,50 +388,59 @@ onUnmounted(() => {
               path: '/certificate-deployments',
               query: { certificate: selected.id },
             }"
-            ><n-button type="primary">用于网站</n-button></router-link
           >
+            <n-button type="primary">
+              用于网站
+            </n-button>
+          </router-link>
           <router-link
             v-if="selected.source === 'acme'"
             :to="{
               path: '/certificate-requests',
               query: { certificate: selected.id },
             }"
-            ><n-button>续期设置</n-button></router-link
           >
-          <n-button :disabled="busy" @click="startImport(selected)"
-            >导入更新</n-button
-          >
+            <n-button>续期设置</n-button>
+          </router-link>
+          <n-button :disabled="busy" @click="startImport(selected)">
+            导入更新
+          </n-button>
           <n-button
             type="error"
             :disabled="
               busy ||
-              !!selected.bindings.length ||
-              !!selected.historical_references
+                !!selected.bindings.length ||
+                !!selected.historical_references
             "
             @click="remove"
-            >删除</n-button
           >
+            删除
+          </n-button>
         </div>
       </div>
       <template v-if="version">
         <div class="cert-actions">
-          <n-tag :bordered="false">{{ expiry(version) }}</n-tag
-          ><n-tag :bordered="false">{{
-            version.environment === "staging"
-              ? "测试证书"
-              : version.summary.trust === "system"
-                ? "受信任证书"
-                : version.summary.trust === "private"
-                  ? "私有证书"
-                  : "自签证书"
-          }}</n-tag>
+          <n-tag :bordered="false">
+            {{ expiry(version) }}
+          </n-tag><n-tag :bordered="false">
+            {{
+              version.environment === "staging"
+                ? "测试证书"
+                : version.summary.trust === "system"
+                  ? "受信任证书"
+                  : version.summary.trust === "private"
+                    ? "私有证书"
+                    : "自签证书"
+            }}
+          </n-tag>
         </div>
         <n-alert
           v-if="version.environment === 'staging'"
           type="warning"
           :bordered="false"
-          >测试证书不受浏览器信任，请申请正式证书用于网站。</n-alert
         >
+          测试证书不受浏览器信任，请申请正式证书用于网站。
+        </n-alert>
         <dl class="cert-stats">
           <div>
             <dt>生效时间</dt>
@@ -445,8 +465,9 @@ onUnmounted(() => {
               ]"
               :key="domain"
               size="small"
-              >{{ domain }}</n-tag
             >
+              {{ domain }}
+            </n-tag>
           </div>
         </div>
       </template>
@@ -473,35 +494,41 @@ onUnmounted(() => {
       @submit="save"
       @cancel="closeImport"
     >
-      <n-form-item label="名称"
-        ><n-input v-model:value="name" :maxlength="128"
-      /></n-form-item>
-      <n-form-item label="备注"
-        ><n-input v-model:value="notes" :maxlength="2048"
-      /></n-form-item>
-      <n-form-item label="证书文件"
-        ><div style="width: 100%">
+      <n-form-item label="名称">
+        <n-input v-model:value="name" :maxlength="128" />
+      </n-form-item>
+      <n-form-item label="备注">
+        <n-input v-model:value="notes" :maxlength="2048" />
+      </n-form-item>
+      <n-form-item label="证书文件">
+        <div style="width: 100%">
           <input
             type="file"
             accept=".pem,.crt,.cer"
             :disabled="busy"
             @change="readFile($event, 'chain')"
           />
-          <p v-if="chainName" class="muted">已选择：{{ chainName }}</p>
-        </div></n-form-item
-      >
-      <n-form-item label="私钥文件"
-        ><div style="width: 100%">
+          <p v-if="chainName" class="muted">
+            已选择：{{ chainName }}
+          </p>
+        </div>
+      </n-form-item>
+      <n-form-item label="私钥文件">
+        <div style="width: 100%">
           <input
             type="file"
             accept=".pem,.key"
             :disabled="busy"
             @change="readFile($event, 'key')"
           />
-          <p v-if="keyName" class="muted">已选择：{{ keyName }}</p>
-        </div></n-form-item
-      >
-      <p class="muted">请选择配套的证书和私钥文件。私钥导入后会加密保存。</p>
+          <p v-if="keyName" class="muted">
+            已选择：{{ keyName }}
+          </p>
+        </div>
+      </n-form-item>
+      <p class="muted">
+        请选择配套的证书和私钥文件。私钥导入后会加密保存。
+      </p>
     </FormDialog>
   </CertificateWorkspace>
 </template>

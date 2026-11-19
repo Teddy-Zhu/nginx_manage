@@ -25,10 +25,10 @@ const actions: Record<string, string> = {
   <div class="stack">
     <div class="toolbar">
       <h3>防火墙规则</h3>
-      <NTag
-        >{{ modes[info.mode] || info.mode }} ·
-        {{ states[info.state] || info.state }}</NTag
-      >
+      <NTag>
+        {{ modes[info.mode] || info.mode }} ·
+        {{ states[info.state] || info.state }}
+      </NTag>
     </div>
     <p>来源规则 {{ info.source_rules }} 条</p>
     <p v-if="info.mode !== 'preserve'">
@@ -40,8 +40,9 @@ const actions: Record<string, string> = {
       v-for="(warning, index) in info.warnings"
       :key="index"
       type="warning"
-      >{{ warning }}</NAlert
     >
+      {{ warning }}
+    </NAlert>
     <div v-if="info.interfaces.length" class="table-wrap">
       <table>
         <thead>

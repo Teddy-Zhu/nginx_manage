@@ -217,51 +217,59 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   <section class="panel page-stack">
     <div class="toolbar">
       <h3>安装运行依赖</h3>
-      <NButton size="small" :loading="reading" @click="refresh"
-        >刷新任务</NButton
-      >
+      <NButton size="small" :loading="reading" @click="refresh">
+        刷新任务
+      </NButton>
     </div>
     <p v-if="currentPython?.standard_library === true">
       系统 Python {{ currentPython.version || "—" }} · 标准库与 SQLite 可用
     </p>
-    <p v-else class="muted">Fail2ban 的运行依赖尚未就绪。</p>
+    <p v-else class="muted">
+      Fail2ban 的运行依赖尚未就绪。
+    </p>
 
     <p v-if="currentAt">
       状态快照 {{ new Date(currentAt * 1000).toLocaleString() }}
     </p>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <NAlert v-if="historyError" type="warning"
-      >任务记录读取失败：{{ historyError }}</NAlert
-    >
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
+    <NAlert v-if="historyError" type="warning">
+      任务记录读取失败：{{ historyError }}
+    </NAlert>
     <NAlert v-if="pending" type="warning">
       提交结果待确认。
-      <NButton size="small" :loading="busy" @click="submit()"
-        >继续原请求</NButton
-      >
+      <NButton size="small" :loading="busy" @click="submit()">
+        继续原请求
+      </NButton>
     </NAlert>
     <template v-if="canManage">
-      <NAlert v-if="!moduleEnabled" type="warning">请先开启登录防护。</NAlert>
+      <NAlert v-if="!moduleEnabled" type="warning">
+        请先开启登录防护。
+      </NAlert>
       <p>自动识别服务器环境，检查并安装所需的运行依赖。</p>
-      <NCheckbox v-model:checked="refreshIndex" :disabled="!canSubmit"
-        >更新软件列表</NCheckbox
-      >
+      <NCheckbox v-model:checked="refreshIndex" :disabled="!canSubmit">
+        更新软件列表
+      </NCheckbox>
       <div class="toolbar">
         <NPopconfirm
           v-if="refreshIndex"
           :disabled="!canSubmit"
           @positive-click="plan"
         >
-          <template #trigger
-            ><NButton :disabled="!canSubmit" :loading="busy"
-              >更新软件列表并检查依赖</NButton
-            ></template
-          >
+          <template #trigger>
+            <NButton :disabled="!canSubmit" :loading="busy">
+              更新软件列表并检查依赖
+            </NButton>
+          </template>
           将使用宿主机现有仓库配置刷新索引，可能运行已有包管理器钩子。本次不安装软件包。
         </NPopconfirm>
-        <NButton v-else :disabled="!canSubmit" :loading="busy" @click="plan"
-          >检查所需依赖</NButton
-        >
+        <NButton v-else :disabled="!canSubmit" :loading="busy" @click="plan">
+          检查所需依赖
+        </NButton>
       </div>
       <NFormItem v-if="plans.length > 1" label="安装方案">
         <NSelect
@@ -278,11 +286,11 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         </p>
 
         <NPopconfirm :disabled="!canSubmit" @positive-click="install">
-          <template #trigger
-            ><NButton type="primary" :disabled="!canSubmit" :loading="busy"
-              >安装所需依赖</NButton
-            ></template
-          >
+          <template #trigger>
+            <NButton type="primary" :disabled="!canSubmit" :loading="busy">
+              安装所需依赖
+            </NButton>
+          </template>
           将从系统软件仓库安装所列依赖，完成后可继续安装 Fail2ban。
         </NPopconfirm>
       </template>
@@ -302,7 +310,9 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         </p>
       </article>
     </template>
-    <p v-else-if="loaded">暂无依赖任务</p>
+    <p v-else-if="loaded">
+      暂无依赖任务
+    </p>
   </section>
 </template>
 

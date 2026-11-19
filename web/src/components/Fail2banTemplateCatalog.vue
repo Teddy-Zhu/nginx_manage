@@ -65,10 +65,13 @@ onUnmounted(() => {
         :disabled="!templates.length"
         :loading="checking"
         @click="check"
-        >验证内置模板</NButton
       >
+        验证内置模板
+      </NButton>
     </div>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
     <div
       v-for="template in templates"
       :key="template.id"
@@ -101,9 +104,11 @@ onUnmounted(() => {
           {{ new Date(latest.get(template.id)!.at * 1000).toLocaleString() }}
         </p>
 
-        <NAlert v-if="latest.get(template.id)!.reason" type="warning">{{
-          latest.get(template.id)!.reason
-        }}</NAlert>
+        <NAlert v-if="latest.get(template.id)!.reason" type="warning">
+          {{
+            latest.get(template.id)!.reason
+          }}
+        </NAlert>
         <p v-if="latest.get(template.id)!.available" class="muted">
           实际匹配地址：{{
             latest.get(template.id)!.matched_ips.join(", ") || "无"

@@ -180,47 +180,55 @@ const columns: DataTableColumns<Binding> = [
 
 <template>
   <h4>容器端口规则</h4>
-  <n-alert type="warning" :bordered="false">{{ plan.reason }}</n-alert>
-  <p class="muted">选择规则对应的容器端口和访问地址。此关联仅用于本次变更。</p>
+  <n-alert type="warning" :bordered="false">
+    {{ plan.reason }}
+  </n-alert>
+  <p class="muted">
+    选择规则对应的容器端口和访问地址。此关联仅用于本次变更。
+  </p>
   <n-space class="notice">
-    <n-button :disabled="disabled" @click="emit('reload')"
-      >重新读取目标</n-button
-    >
-    <n-button :disabled="disabled || !bindings.length" @click="change([])"
-      >清空关联</n-button
-    >
+    <n-button :disabled="disabled" @click="emit('reload')">
+      重新读取目标
+    </n-button>
+    <n-button :disabled="disabled || !bindings.length" @click="change([])">
+      清空关联
+    </n-button>
     <span>{{ bindings.length }} / 128 项关联</span>
   </n-space>
   <p v-if="plan.truncated" class="muted">
     仅显示前 128 项，请减少选择范围后重试。
   </p>
   <div class="grid">
-    <n-form-item label="防火墙规则"
-      ><n-select
+    <n-form-item label="防火墙规则">
+      <n-select
         v-model:value="ruleID"
         :options="ruleOptions"
         :disabled="disabled"
-    /></n-form-item>
-    <n-form-item label="容器端口"
-      ><n-select
+      />
+    </n-form-item>
+    <n-form-item label="容器端口">
+      <n-select
         v-model:value="mapping"
         :options="mappingOptions"
         :disabled="disabled || !ruleID"
         filterable
-    /></n-form-item>
-    <n-form-item label="访问地址"
-      ><n-select
+      />
+    </n-form-item>
+    <n-form-item label="访问地址">
+      <n-select
         v-model:value="address"
         :options="addressOptions"
         :disabled="disabled || mapping === null"
         filterable
-    /></n-form-item>
+      />
+    </n-form-item>
   </div>
   <n-button
     :disabled="disabled || address === null || bindings.length >= 128"
     @click="add"
-    >添加关联</n-button
   >
+    添加关联
+  </n-button>
   <p v-if="ruleID && !mappingOptions.length" class="muted">
     没有匹配的容器端口，请检查容器是否运行并开放了对应端口。
   </p>
@@ -240,9 +248,12 @@ const columns: DataTableColumns<Binding> = [
     type="info"
     :bordered="false"
     class="notice"
-    >{{ warning }}</n-alert
   >
-  <p v-if="plan.compiled" class="muted">规则检查通过，可应用变更。</p>
+    {{ warning }}
+  </n-alert>
+  <p v-if="plan.compiled" class="muted">
+    规则检查通过，可应用变更。
+  </p>
 </template>
 
 <style scoped>

@@ -143,16 +143,20 @@ const time = (p: MonitoringPoint | undefined) =>
         }}
       </text>
     </svg>
-    <div v-else class="trend-empty">所选时段暂无有效样本</div>
+    <div v-else class="trend-empty">
+      所选时段暂无有效样本
+    </div>
     <div class="muted trend-detail" aria-live="polite">
-      <template v-if="active"
-        >{{ time(active) }} · 均值 {{ format(active.average) }} {{ unit }} ·
+      <template v-if="active">
+        {{ time(active) }} · 均值 {{ format(active.average) }} {{ unit }} ·
         最小 {{ format(active.minimum) }} · 最大 {{ format(active.maximum) }} ·
         {{ active.count }} 个样本{{
           active.gap ? " · 含采样空档" : ""
-        }}</template
-      >
-      <template v-else>移动指针或聚焦数据点查看详情</template>
+        }}
+      </template>
+      <template v-else>
+        移动指针或聚焦数据点查看详情
+      </template>
     </div>
   </div>
 </template>

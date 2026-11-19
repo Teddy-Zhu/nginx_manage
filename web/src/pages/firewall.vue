@@ -65,39 +65,47 @@ useLiveRefresh(api, ["tasks", "firewall", "listener"], load, () => busy.value);
   <div class="page-stack">
     <div class="section-heading">
       <h2>防火墙状态</h2>
-      <NButton :loading="busy" @click="load">刷新状态</NButton>
+      <NButton :loading="busy" @click="load">
+        刷新状态
+      </NButton>
     </div>
-    <NAlert v-if="error" type="error"
-      >暂时无法读取防火墙状态，请稍后重试。</NAlert
-    >
+    <NAlert v-if="error" type="error">
+      暂时无法读取防火墙状态，请稍后重试。
+    </NAlert>
     <section class="panel page-stack">
       <div class="section-heading">
         <h3>本工具的规则</h3>
-        <NTag :type="applied ? 'success' : 'default'">{{
-          !runtime
-            ? "正在读取"
-            : changed
-              ? "变更待确认"
-              : applied
-                ? "已应用"
-                : "未应用"
-        }}</NTag>
+        <NTag :type="applied ? 'success' : 'default'">
+          {{
+            !runtime
+              ? "正在读取"
+              : changed
+                ? "变更待确认"
+                : applied
+                  ? "已应用"
+                  : "未应用"
+          }}
+        </NTag>
       </div>
-      <p class="muted">管理端口放通、端口屏蔽以及 IP 和国家黑白名单。</p>
+      <p class="muted">
+        管理端口放通、端口屏蔽以及 IP 和国家黑白名单。
+      </p>
       <div class="button-row">
-        <RouterLink to="/firewall-rules"
-          ><NButton type="primary">管理规则</NButton></RouterLink
-        ><RouterLink to="/firewall-apply"
-          ><NButton>应用与确认变更</NButton></RouterLink
-        >
+        <RouterLink to="/firewall-rules">
+          <NButton type="primary">
+            管理规则
+          </NButton>
+        </RouterLink><RouterLink to="/firewall-apply">
+          <NButton>应用与确认变更</NButton>
+        </RouterLink>
       </div>
     </section>
     <section v-if="observation" class="panel page-stack">
       <h3>已有防火墙</h3>
       <p>{{ systemStatus }}</p>
-      <NAlert type="info"
-        >系统已有规则会继续生效。存在规则冲突时，修改前会要求确认。</NAlert
-      >
+      <NAlert type="info">
+        系统已有规则会继续生效。存在规则冲突时，修改前会要求确认。
+      </NAlert>
       <p v-if="observation.at" class="muted">
         更新于 {{ new Date(observation.at * 1000).toLocaleString() }}
       </p>
@@ -105,8 +113,11 @@ useLiveRefresh(api, ["tasks", "firewall", "listener"], load, () => busy.value);
     <section class="panel page-stack">
       <h3>操作记录</h3>
       <div class="button-row">
-        <RouterLink to="/tasks">查看防火墙操作</RouterLink
-        ><RouterLink to="/logs">查看服务日志</RouterLink>
+        <RouterLink to="/tasks">
+          查看防火墙操作
+        </RouterLink><RouterLink to="/logs">
+          查看服务日志
+        </RouterLink>
       </div>
     </section>
   </div>

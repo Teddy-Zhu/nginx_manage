@@ -18,10 +18,16 @@ const descriptions = {
   <section class="surface software-required">
     <span class="software-icon">{{ software === "nginx" ? "N" : "F" }}</span>
     <h2>{{ state === "unbound" ? "连接已有软件" : state === "recovery" ? "安装尚未完成" : `尚未安装 ${names[software]}` }}</h2>
-    <p class="muted">{{ state === "unbound" ? `服务器上已有 ${names[software]}，连接后即可管理。` : state === "recovery" ? "请继续完成安装，或恢复上一次安装操作。" : descriptions[software] }}</p>
+    <p class="muted">
+      {{ state === "unbound" ? `服务器上已有 ${names[software]}，连接后即可管理。` : state === "recovery" ? "请继续完成安装，或恢复上一次安装操作。" : descriptions[software] }}
+    </p>
     <RouterLink v-if="canInstall" :to="{ path: '/components', query: { software, ...(state === 'unbound' ? { existing: '1' } : {}) } }">
-      <NButton type="primary">{{ state === "unbound" ? "连接" : state === "recovery" ? "继续安装" : "安装" }} {{ names[software] }}</NButton>
+      <NButton type="primary">
+        {{ state === "unbound" ? "连接" : state === "recovery" ? "继续安装" : "安装" }} {{ names[software] }}
+      </NButton>
     </RouterLink>
-    <p v-else class="muted">请联系管理员安装或连接此软件。</p>
+    <p v-else class="muted">
+      请联系管理员安装或连接此软件。
+    </p>
   </section>
 </template>

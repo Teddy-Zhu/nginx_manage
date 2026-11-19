@@ -20,6 +20,7 @@ export default tseslint.config(
         navigator: "readonly",
         Event: "readonly",
         AbortController: "readonly",
+        AbortSignal: "readonly",
         crypto: "readonly",
         structuredClone: "readonly",
         BeforeUnloadEvent: "readonly",

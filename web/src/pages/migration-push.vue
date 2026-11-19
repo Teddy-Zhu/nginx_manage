@@ -273,43 +273,52 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
 </script>
 <template>
   <div class="stack">
-    <NAlert v-if="!permitted" type="warning"
-      >需要配置秘密导出与节点管理权限。</NAlert
-    >
+    <NAlert v-if="!permitted" type="warning">
+      需要配置秘密导出与节点管理权限。
+    </NAlert>
     <template v-else>
-      <NAlert v-if="error" type="error">{{ error }}</NAlert>
+      <NAlert v-if="error" type="error">
+        {{ error }}
+      </NAlert>
       <section class="panel stack">
         <h2>迁移到其他服务器</h2>
         <div class="form-grid">
-          <NFormItem label="服务器地址"
-            ><NInput
+          <NFormItem label="服务器地址">
+            <NInput
               v-model:value="url"
               placeholder="https://target.example.com:9443/api/v1"
-          /></NFormItem>
-          <NFormItem label="目标 API Key"
-            ><NInput
+            />
+          </NFormItem>
+          <NFormItem label="目标 API Key">
+            <NInput
               v-model:value="key"
               type="password"
               show-password-on="click"
               autocomplete="off"
-          /></NFormItem>
+            />
+          </NFormItem>
         </div>
-        <NFormItem label="导出范围"
-          ><div class="choice-grid">
-            <NCheckbox v-model:checked="certificates">证书与私钥</NCheckbox
-            ><NCheckbox v-model:checked="credentials">DNS 凭据</NCheckbox
-            ><NCheckbox v-model:checked="automation">ACME 配置</NCheckbox
-            ><NCheckbox v-model:checked="notifications">通知渠道</NCheckbox
-            ><NCheckbox v-model:checked="includeHostDNS"
-              >主机 DNS 已保存配置</NCheckbox
-            ><NCheckbox v-model:checked="includeMonitoring">监控配置</NCheckbox
-            ><NCheckbox v-model:checked="includeFail2ban"
-              >jail 期望配置</NCheckbox
-            ><NCheckbox v-model:checked="includeFirewall"
-              >防火墙期望规则</NCheckbox
-            >
-          </div></NFormItem
-        >
+        <NFormItem label="导出范围">
+          <div class="choice-grid">
+            <NCheckbox v-model:checked="certificates">
+              证书与私钥
+            </NCheckbox><NCheckbox v-model:checked="credentials">
+              DNS 凭据
+            </NCheckbox><NCheckbox v-model:checked="automation">
+              ACME 配置
+            </NCheckbox><NCheckbox v-model:checked="notifications">
+              通知渠道
+            </NCheckbox><NCheckbox v-model:checked="includeHostDNS">
+              主机 DNS 已保存配置
+            </NCheckbox><NCheckbox v-model:checked="includeMonitoring">
+              监控配置
+            </NCheckbox><NCheckbox v-model:checked="includeFail2ban">
+              jail 期望配置
+            </NCheckbox><NCheckbox v-model:checked="includeFirewall">
+              防火墙期望规则
+            </NCheckbox>
+          </div>
+        </NFormItem>
         <section>
           <h3>迁移设置</h3>
           <div class="page-stack">
@@ -317,11 +326,13 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
               label="目标参数映射"
               :validation-status="mappingError ? 'error' : undefined"
               :feedback="mappingError"
-              ><MappingInput
-                :max="128"
+            >
+              <MappingInput
                 v-model:value="mappings"
+                :max="128"
                 :disabled="busy"
-            /></NFormItem>
+              />
+            </NFormItem>
             <p class="muted">
               保留目标服务器的网络设置。DNS
               可在迁移完成后，到目标服务器的网络设置中调整。
@@ -336,41 +347,42 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
             />
             <MigrationFirewallOptions
               v-model="firewallSettings"
-              @update:valid="firewallValid = $event"
               :disabled="busy"
+              @update:valid="firewallValid = $event"
             />
           </div>
         </section>
-        <NFormItem label="执行方式"
-          ><NSelect v-model:value="mode" :options="modes"
-        /></NFormItem>
-        <NCheckbox v-model:checked="enableNginx"
-          >授权启用目标 Nginx 配置模块</NCheckbox
-        >
+        <NFormItem label="执行方式">
+          <NSelect v-model:value="mode" :options="modes" />
+        </NFormItem>
+        <NCheckbox v-model:checked="enableNginx">
+          授权启用目标 Nginx 配置模块
+        </NCheckbox>
         <div v-if="mode !== 'preview'" class="page-stack">
-          <NCheckbox v-model:checked="prepareDependencies"
-            >授权目标准备 Nginx 可信组件</NCheckbox
-          >
+          <NCheckbox v-model:checked="prepareDependencies">
+            授权目标准备 Nginx 可信组件
+          </NCheckbox>
           <div v-if="prepareDependencies" class="page-stack">
-            <NFormItem label="目标 Nginx 组件发行标签（可选）"
-              ><NInput
+            <NFormItem label="目标 Nginx 组件发行标签（可选）">
+              <NInput
                 v-model:value="dependencyTag"
                 placeholder="留空使用稳定版"
-            /></NFormItem>
-            <NCheckbox v-model:checked="dependencyPrerelease"
-              >允许指定的预发布版本</NCheckbox
-            >
+              />
+            </NFormItem>
+            <NCheckbox v-model:checked="dependencyPrerelease">
+              允许指定的预发布版本
+            </NCheckbox>
             <div>
-              <NCheckbox v-model:checked="dependencyInstall"
-                >授权目标缺失时安装 Nginx</NCheckbox
-              >
+              <NCheckbox v-model:checked="dependencyInstall">
+                授权目标缺失时安装 Nginx
+              </NCheckbox>
               <template v-if="dependencyInstall">
-                <NCheckbox v-model:checked="dependencyStart"
-                  >安装后启动</NCheckbox
-                >
-                <NCheckbox v-model:checked="dependencyEnable"
-                  >开机自动启动</NCheckbox
-                >
+                <NCheckbox v-model:checked="dependencyStart">
+                  安装后启动
+                </NCheckbox>
+                <NCheckbox v-model:checked="dependencyEnable">
+                  开机自动启动
+                </NCheckbox>
                 <p>
                   目标 Key
                   须具备系统写入权限。安装期间暂停目标配置写入，完成后恢复并重新预检。
@@ -384,25 +396,26 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
           迁移期间原服务器继续运行。目标保留管理员账户和网络设置；迁入的自动任务和通知默认停用。
         </p>
         <div class="form-actions">
-          <NPopconfirm @positive-click="submit"
-            ><template #trigger
-              ><NButton
+          <NPopconfirm @positive-click="submit">
+            <template #trigger>
+              <NButton
                 type="primary"
                 :disabled="
                   busy ||
-                  !url ||
-                  !key ||
-                  !firewallValid ||
-                  !!mappingError
+                    !url ||
+                    !key ||
+                    !firewallValid ||
+                    !!mappingError
                 "
-                >创建迁出任务</NButton
-              ></template
-            >{{
+              >
+                创建迁出任务
+              </NButton>
+            </template>{{
               mode === "preview"
                 ? "确认将加密配置包发送到目标进行预检？"
                 : "确认按所选方式迁入目标？保存或应用会替换目标 Nginx 业务配置。"
-            }}</NPopconfirm
-          >
+            }}
+          </NPopconfirm>
         </div>
       </section>
       <section v-if="selected" class="panel stack">
@@ -416,8 +429,11 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
                   ? 'error'
                   : 'warning'
             "
-            >{{ stateLabels[selected.state] || selected.state }}</NTag
-          ><NButton :disabled="busy || reading" @click="load">刷新</NButton>
+          >
+            {{ stateLabels[selected.state] || selected.state }}
+          </NTag><NButton :disabled="busy || reading" @click="load">
+            刷新
+          </NButton>
         </div>
         <dl class="detail-list">
           <dt>阶段</dt>
@@ -428,9 +444,11 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
           <dt>授权截止</dt>
           <dd>{{ date(selected.expires_at) }}</dd>
         </dl>
-        <NAlert v-if="selected.error" type="warning">{{
-          selected.error
-        }}</NAlert>
+        <NAlert v-if="selected.error" type="warning">
+          {{
+            selected.error
+          }}
+        </NAlert>
         <template v-if="selected.plan">
           <MigrationHostDNSPreview
             v-if="selected.plan.host_dns"
@@ -483,31 +501,36 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value || busy.value);
             {{ item }}
           </p>
         </template>
-        <template v-if="canResume"
-          ><NFormItem label="重新授权目标 Key"
-            ><NInput
+        <template v-if="canResume">
+          <NFormItem label="重新授权目标 Key">
+            <NInput
               v-model:value="resumeKey"
               type="password"
               show-password-on="click"
-              autocomplete="off" /></NFormItem
-          ><NPopconfirm @positive-click="resume"
-            ><template #trigger
-              ><NButton :disabled="busy || !resumeKey"
-                >核对并继续原任务</NButton
-              ></template
-            >确认使用原配置包、原目标和原执行方式继续？目标缺失原计划时将保留待恢复状态。</NPopconfirm
-          ></template
-        >
+              autocomplete="off"
+            />
+          </NFormItem><NPopconfirm @positive-click="resume">
+            <template #trigger>
+              <NButton :disabled="busy || !resumeKey">
+                核对并继续原任务
+              </NButton>
+            </template>确认使用原配置包、原目标和原执行方式继续？目标缺失原计划时将保留待恢复状态。
+          </NPopconfirm>
+        </template>
       </section>
       <section class="panel stack">
         <h2>迁出记录</h2>
-        <p v-if="history.length === 0" class="muted">暂无迁出记录</p>
+        <p v-if="history.length === 0" class="muted">
+          暂无迁出记录
+        </p>
         <div v-for="item in history" :key="item.id" class="record-card">
-          <NButton text @click="inspect(item.id)"
-            >{{ date(item.created_at) }} · {{ item.target_url }}</NButton
-          ><NTag>{{
-            labels[item.stage] || stateLabels[item.state] || item.state
-          }}</NTag>
+          <NButton text @click="inspect(item.id)">
+            {{ date(item.created_at) }} · {{ item.target_url }}
+          </NButton><NTag>
+            {{
+              labels[item.stage] || stateLabels[item.state] || item.state
+            }}
+          </NTag>
         </div>
       </section>
     </template>

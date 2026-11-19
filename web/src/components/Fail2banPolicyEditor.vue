@@ -225,11 +225,15 @@ onUnmounted(() => {
     <div class="toolbar">
       <h3>防护规则</h3>
     </div>
-    <NAlert type="info"
-      >保存后点击检查并应用，使规则生效。已有软件的规则可在下方管理。</NAlert
-    >
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
+    <NAlert type="info">
+      保存后点击检查并应用，使规则生效。已有软件的规则可在下方管理。
+    </NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
     <Fail2banTemplateCatalog
       :templates="templates"
       :checks="preview?.template_checks"
@@ -242,105 +246,117 @@ onUnmounted(() => {
           size="small"
           type="error"
           @click="remove(jail.id)"
-          >移除配置</NButton
         >
+          移除配置
+        </NButton>
       </div>
-      <NFormItem label="名称"
-        ><NInput v-model:value="jail.name" :disabled="busy" :maxlength="120"
-      /></NFormItem>
+      <NFormItem label="名称">
+        <NInput v-model:value="jail.name" :disabled="busy" :maxlength="120" />
+      </NFormItem>
       <NFormItem label="内置模板">
         <NSelect
           :value="jail.template"
-          @update:value="selectTemplate(jail, $event)"
           :disabled="busy"
           :options="templateOptions"
+          @update:value="selectTemplate(jail, $event)"
         />
       </NFormItem>
-      <NFormItem label="启用规则"
-        ><NSwitch v-model:value="jail.enabled" :disabled="busy"
-      /></NFormItem>
+      <NFormItem label="启用规则">
+        <NSwitch v-model:value="jail.enabled" :disabled="busy" />
+      </NFormItem>
       <NAlert v-if="jail.template === panelTemplate" type="warning">
         面板登录防护适用于直接访问面板的连接。通过反向代理访问时，请使用站点登录防护。
       </NAlert>
-      <NFormItem v-else label="站点结构化访问日志"
-        ><NSelect
+      <NFormItem v-else label="站点结构化访问日志">
+        <NSelect
           v-model:value="jail.resource_id"
           :disabled="busy"
           :options="sourceOptions"
           filterable
-      /></NFormItem>
-      <NFormItem label="封禁方式"
-        ><NSelect
+        />
+      </NFormItem>
+      <NFormItem label="封禁方式">
+        <NSelect
           v-model:value="jail.action"
           :disabled="busy || jail.template === panelTemplate"
           :options="actions"
-      /></NFormItem>
+        />
+      </NFormItem>
       <div class="actions">
-        <NFormItem label="封禁秒数（-1 为永久）"
-          ><NInputNumber
+        <NFormItem label="封禁秒数（-1 为永久）">
+          <NInputNumber
             :value="jail.ban_time"
-            @update:value="setNumber(jail, 'ban_time', $event)"
             :disabled="busy"
             :min="-1"
             :max="31536000"
             :precision="0"
-        /></NFormItem>
-        <NFormItem label="统计窗口（秒）"
-          ><NInputNumber
+            @update:value="setNumber(jail, 'ban_time', $event)"
+          />
+        </NFormItem>
+        <NFormItem label="统计窗口（秒）">
+          <NInputNumber
             :value="jail.find_time"
-            @update:value="setNumber(jail, 'find_time', $event)"
             :disabled="busy"
             :min="1"
             :max="86400"
             :precision="0"
-        /></NFormItem>
-        <NFormItem label="失败阈值"
-          ><NInputNumber
+            @update:value="setNumber(jail, 'find_time', $event)"
+          />
+        </NFormItem>
+        <NFormItem label="失败阈值">
+          <NInputNumber
             :value="jail.max_retry"
-            @update:value="setNumber(jail, 'max_retry', $event)"
             :disabled="busy"
             :min="1"
             :max="1000"
             :precision="0"
-        /></NFormItem>
+            @update:value="setNumber(jail, 'max_retry', $event)"
+          />
+        </NFormItem>
       </div>
-      <NFormItem label="白名单 IP / 网段"
-        ><ValueListInput
+      <NFormItem label="白名单 IP / 网段">
+        <ValueListInput
           v-model:value="jail.ignore_ips"
           :max="64"
           item-label="白名单地址"
           placeholder="192.0.2.1 或 192.0.2.0/24"
           :maxlength="64"
           :disabled="busy"
-      /></NFormItem>
+        />
+      </NFormItem>
     </div>
     <div class="actions">
       <NButton
         :disabled="busy || !view || !templates.length || jails.length >= 32"
         @click="add"
-        >新增 jail 配置</NButton
       >
+        新增 jail 配置
+      </NButton>
       <NButton
         type="primary"
         :disabled="busy || !view || !dirty"
         :loading="busy"
         @click="save"
-        >保存规则</NButton
       >
-      <NButton :disabled="busy || !view?.version || dirty" @click="inspect"
-        >预览保存配置</NButton
-      >
-      <NButton :disabled="busy" @click="load">{{
-        dirty ? "放弃修改并重新读取" : "重新读取"
-      }}</NButton>
+        保存规则
+      </NButton>
+      <NButton :disabled="busy || !view?.version || dirty" @click="inspect">
+        预览保存配置
+      </NButton>
+      <NButton :disabled="busy" @click="load">
+        {{
+          dirty ? "放弃修改并重新读取" : "重新读取"
+        }}
+      </NButton>
     </div>
     <template v-if="preview && !dirty">
       <NAlert
         v-for="warning in preview.warnings"
         :key="warning"
         type="warning"
-        >{{ warning }}</NAlert
       >
+        {{ warning }}
+      </NAlert>
       <div v-for="entry in preview.entries" :key="entry.id">
         <strong>{{
           jails.find((jail) => jail.id === entry.id)?.name || entry.jail_name
@@ -349,8 +365,7 @@ onUnmounted(() => {
           · {{ entry.enabled ? "启用规则" : "停用规则" }} · 模板{{
             entry.template_ready ? "已核对" : "未就绪"
           }}
-          · 日志{{ entry.source_ready ? "已核对" : "未就绪" }}</span
-        >
+          · 日志{{ entry.source_ready ? "已核对" : "未就绪" }}</span>
         <p v-for="issue in entry.errors" :key="issue" class="muted">
           {{ issue }}
         </p>

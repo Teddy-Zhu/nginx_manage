@@ -193,111 +193,124 @@ onUnmounted(() => controller.abort());
 </script>
 <template>
   <div>
-    <NFormItem label="主机 DNS 迁入方式"
-      ><NSelect
+    <NFormItem label="主机 DNS 迁入方式">
+      <NSelect
         :value="modelValue.mode"
         :options="options"
         :disabled="disabled"
         @update:value="setMode"
-    /></NFormItem>
+      />
+    </NFormItem>
     <p v-if="allowMap && !sources.length" class="muted">
       预检配置后，可选择需要迁移 DNS 的网卡。
     </p>
     <div v-if="modelValue.mode === 'map'" class="dns-mappings">
       <div class="toolbar">
         <span class="muted">选择当前服务器上接收 DNS 配置的网络。</span>
-        <NButton :loading="loading" :disabled="disabled" @click="loadNetwork"
-          >刷新网卡</NButton
-        >
+        <NButton :loading="loading" :disabled="disabled" @click="loadNetwork">
+          刷新网卡
+        </NButton>
       </div>
-      <NAlert v-if="loadError" type="warning">{{ loadError }}</NAlert>
-      <NAlert v-else-if="!loading && !targetOptions.length" type="warning"
-        >当前没有可修改的网络，请先在网络设置中检查 DNS 配置。</NAlert
-      >
+      <NAlert v-if="loadError" type="warning">
+        {{ loadError }}
+      </NAlert>
+      <NAlert v-else-if="!loading && !targetOptions.length" type="warning">
+        当前没有可修改的网络，请先在网络设置中检查 DNS 配置。
+      </NAlert>
       <div v-for="row in rows" :key="row.source" class="dns-mapping">
         <div class="mapping-targets">
-          <NFormItem label="来源 DNS"
-            ><span>{{ dnsLocationLabel(row.source) }}</span></NFormItem
-          >
-          <NFormItem label="目标 DNS"
-            ><DNSTargetInput
+          <NFormItem label="来源 DNS">
+            <span>{{ dnsLocationLabel(row.source) }}</span>
+          </NFormItem>
+          <NFormItem label="目标 DNS">
+            <DNSTargetInput
               v-model:value="row.target"
               :options="targetOptions"
               :loading="loading"
               :disabled="disabled"
               @update:value="update"
-          /></NFormItem>
+            />
+          </NFormItem>
         </div>
-        <NFormItem label="自定义目标 DNS 配置"
-          ><NSwitch
+        <NFormItem label="自定义目标 DNS 配置">
+          <NSwitch
             v-model:value="row.override"
             :disabled="disabled || row.target === null"
             @update:value="update"
-        /></NFormItem>
+          />
+        </NFormItem>
         <template v-if="row.override">
           <template v-if="!connectionDNS(row.target)">
-            <NFormItem label="DNS 服务器"
-              ><ValueListInput
+            <NFormItem label="DNS 服务器">
+              <ValueListInput
                 v-model:value="row.config.servers"
                 item-label="DNS 地址"
                 :max="3"
                 placeholder="DNS 服务器地址"
                 :disabled="disabled"
                 @update:value="update"
-            /></NFormItem>
-            <NFormItem label="搜索域"
-              ><ValueListInput
+              />
+            </NFormItem>
+            <NFormItem label="搜索域">
+              <ValueListInput
                 v-model:value="row.config.search"
                 item-label="搜索域"
                 :max="6"
                 placeholder="example.com"
                 :disabled="disabled"
                 @update:value="update"
-            /></NFormItem>
+              />
+            </NFormItem>
           </template>
           <template v-else>
             <template v-for="key in familyKeys" :key="key">
-              <NFormItem :label="`单独设置 ${key === 'ipv4' ? 'IPv4' : 'IPv6'}`"
-                ><NSwitch
+              <NFormItem :label="`单独设置 ${key === 'ipv4' ? 'IPv4' : 'IPv6'}`">
+                <NSwitch
                   :value="!!row.config[key]"
                   :disabled="disabled"
                   @update:value="toggleFamily(row, key, $event)"
-              /></NFormItem>
+                />
+              </NFormItem>
               <div v-if="row.config[key]" class="family-config">
-                <NFormItem label="自动获取 DNS"
-                  ><NSwitch
+                <NFormItem label="自动获取 DNS">
+                  <NSwitch
                     v-model:value="row.config[key]!.automatic"
                     :disabled="disabled"
                     @update:value="update"
-                /></NFormItem>
-                <NFormItem label="DNS 服务器"
-                  ><ValueListInput
+                  />
+                </NFormItem>
+                <NFormItem label="DNS 服务器">
+                  <ValueListInput
                     v-model:value="row.config[key]!.servers"
                     item-label="DNS 地址"
                     :max="3"
                     placeholder="DNS 服务器地址"
                     :disabled="disabled"
                     @update:value="update"
-                /></NFormItem>
-                <NFormItem label="搜索域"
-                  ><ValueListInput
+                  />
+                </NFormItem>
+                <NFormItem label="搜索域">
+                  <ValueListInput
                     v-model:value="row.config[key]!.search"
                     item-label="搜索域"
                     :max="6"
                     placeholder="example.com"
                     :disabled="disabled"
                     @update:value="update"
-                /></NFormItem>
+                  />
+                </NFormItem>
               </div>
             </template>
           </template>
         </template>
       </div>
-      <NAlert v-if="error" type="error">{{ error }}</NAlert>
-      <NAlert type="warning"
-        >请为每个来源选择目标网络。需要调整 DNS
-        地址时，打开自定义配置。迁移后仍需到网络设置中应用并确认。</NAlert
-      >
+      <NAlert v-if="error" type="error">
+        {{ error }}
+      </NAlert>
+      <NAlert type="warning">
+        请为每个来源选择目标网络。需要调整 DNS
+        地址时，打开自定义配置。迁移后仍需到网络设置中应用并确认。
+      </NAlert>
     </div>
   </div>
 </template>

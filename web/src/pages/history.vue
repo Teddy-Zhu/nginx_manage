@@ -180,22 +180,24 @@ async function execute() {
               />
             </NFormItem>
           </div>
-          <NButton :loading="busy" :disabled="!!pending" @click="inspect"
-            >预览清理范围</NButton
-          >
+          <NButton :loading="busy" :disabled="!!pending" @click="inspect">
+            预览清理范围
+          </NButton>
         </section>
         <NAlert v-if="pending" type="warning" :bordered="false">
           上次清理结果待确认。请使用原请求核对结果。
-          <NButton :loading="busy" @click="execute">核对原操作结果</NButton>
+          <NButton :loading="busy" @click="execute">
+            核对原操作结果
+          </NButton>
         </NAlert>
         <section v-if="preview" class="surface page-stack">
           <div class="toolbar">
             <span>本批 {{ total }} 项，每类最多 100 项</span>
             <NPopconfirm v-if="!pending" @positive-click="execute">
               <template #trigger>
-                <NButton type="error" :loading="busy" :disabled="!total"
-                  >清理本批材料</NButton
-                >
+                <NButton type="error" :loading="busy" :disabled="!total">
+                  清理本批材料
+                </NButton>
               </template>
               确认清理本批 {{ total }} 项历史材料？清理后无法再加载。
             </NPopconfirm>
@@ -221,7 +223,9 @@ async function execute() {
           />
         </section>
         <section v-if="result" class="surface page-stack">
-          <NAlert type="success" :bordered="false">已完成清理</NAlert>
+          <NAlert type="success" :bordered="false">
+            已完成清理
+          </NAlert>
           <NDataTable
             :columns="scopeColumns"
             :data="result.scopes"
@@ -230,8 +234,8 @@ async function execute() {
         </section>
       </div>
     </NTabPane>
-    <NTabPane name="runtime" tab="旧文件" display-directive="if"
-      ><RuntimeHistory
-    /></NTabPane>
+    <NTabPane name="runtime" tab="旧文件" display-directive="if">
+      <RuntimeHistory />
+    </NTabPane>
   </NTabs>
 </template>

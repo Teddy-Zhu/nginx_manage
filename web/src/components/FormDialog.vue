@@ -14,7 +14,13 @@ const props = withDefaults(
     submitText?: string;
     width?: string;
   }>(),
-  { busy: false, submitDisabled: false, submitText: "保存", width: "720px" },
+  {
+    busy: false,
+    draft: undefined,
+    submitDisabled: false,
+    submitText: "保存",
+    width: "720px",
+  },
 );
 const emit = defineEmits<{ submit: []; cancel: [] }>();
 const baseline = ref("");

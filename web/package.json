@@ -13,7 +13,7 @@
     "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json && tsc6 --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
-    "format": "prettier --write src vite.config.ts",
+    "format": "prettier --write src vite.config.ts && eslint \"src/**/*.vue\" --fix --fix-type layout,suggestion",
     "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "generate:routes": "node scripts/generate-routes.mjs"
   },

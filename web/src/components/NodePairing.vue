@@ -200,18 +200,22 @@ onUnmounted(() => {
     <div class="toolbar">
       <h2>服务器配对</h2>
       <div class="inline-gap">
-        <NButton :disabled="busy" @click="load">刷新</NButton>
-        <NButton :disabled="busy" @click="openConnect"
-          >使用配对信息连接</NButton
-        >
-        <NButton v-if="canIssue" :disabled="busy" @click="openGrant"
-          >生成配对信息</NButton
-        >
+        <NButton :disabled="busy" @click="load">
+          刷新
+        </NButton>
+        <NButton :disabled="busy" @click="openConnect">
+          使用配对信息连接
+        </NButton>
+        <NButton v-if="canIssue" :disabled="busy" @click="openGrant">
+          生成配对信息
+        </NButton>
       </div>
     </div>
     <div class="field-list">
       <span>本机连接码</span><NInput :value="sourceNodeId" readonly />
-      <p class="muted">授权其他服务器连接时，在对方填写此连接码。</p>
+      <p class="muted">
+        授权其他服务器连接时，在对方填写此连接码。
+      </p>
     </div>
     <FormDialog
       :show="connectOpen"
@@ -227,33 +231,37 @@ onUnmounted(() => {
         connectOpen = false;
         connect.code = '';
       "
-      ><div class="form-grid">
-        <NFormItem label="连接名称"
-          ><NInput
+    >
+      <div class="form-grid">
+        <NFormItem label="连接名称">
+          <NInput
             v-model:value="connect.name"
             :maxlength="100"
             :disabled="busy"
-        /></NFormItem>
-        <NFormItem label="服务器地址"
-          ><NInput
+          />
+        </NFormItem>
+        <NFormItem label="服务器地址">
+          <NInput
             v-model:value="connect.url"
             :maxlength="2048"
             :disabled="busy"
             placeholder="https://node.example.com/api/v1"
-        /></NFormItem>
-        <NFormItem class="full-width" label="目标生成的配对信息"
-          ><NInput
+          />
+        </NFormItem>
+        <NFormItem class="full-width" label="目标生成的配对信息">
+          <NInput
             v-model:value="connect.code"
             type="textarea"
             :maxlength="2048"
             :disabled="busy"
             autocomplete="off"
-        /></NFormItem>
+          />
+        </NFormItem>
         <p class="section-note full-width">
           使用目标服务器生成的配对信息，在有效期内完成连接。
         </p>
-      </div></FormDialog
-    >
+      </div>
+    </FormDialog>
     <FormDialog
       :show="grantOpen"
       title="生成配对信息"
@@ -261,41 +269,45 @@ onUnmounted(() => {
       :dirty="grantSnapshot !== grantBaseline"
       :submit-disabled="
         !grant.name.trim() ||
-        !grant.controller.trim() ||
-        !cleanList(grant.sources).length ||
-        !grant.scopes.includes('read')
+          !grant.controller.trim() ||
+          !cleanList(grant.sources).length ||
+          !grant.scopes.includes('read')
       "
       submit-text="生成"
       @submit="offer"
       @cancel="grantOpen = false"
-      ><div class="form-grid">
-        <NFormItem label="授权名称"
-          ><NInput v-model:value="grant.name" :maxlength="100" :disabled="busy"
-        /></NFormItem>
-        <NFormItem label="对方服务器连接码"
-          ><NInput
+    >
+      <div class="form-grid">
+        <NFormItem label="授权名称">
+          <NInput v-model:value="grant.name" :maxlength="100" :disabled="busy" />
+        </NFormItem>
+        <NFormItem label="对方服务器连接码">
+          <NInput
             v-model:value="grant.controller"
             :maxlength="36"
             :disabled="busy"
-        /></NFormItem>
-        <NFormItem label="授权权限"
-          ><NSelect
+          />
+        </NFormItem>
+        <NFormItem label="授权权限">
+          <NSelect
             v-model:value="grant.scopes"
             multiple
             :options="scopes"
             :disabled="busy"
-        /></NFormItem>
-        <NFormItem label="允许连接的 IP 或网段"
-          ><ValueListInput
+          />
+        </NFormItem>
+        <NFormItem label="允许连接的 IP 或网段">
+          <ValueListInput
             v-model:value="grant.sources"
             item-label="来源网段"
             :max="32"
             placeholder="192.0.2.10/32"
             :maxlength="64"
             :disabled="busy"
-        /></NFormItem>
-        <NFormItem label="授权有效天数"
-          ><NInputNumber
+          />
+        </NFormItem>
+        <NFormItem label="授权有效天数">
+          <NInputNumber
             :value="grant.days"
             :min="1"
             :max="366"
@@ -307,30 +319,36 @@ onUnmounted(() => {
                 if (value !== null) grant.days = value;
               }
             "
-        /></NFormItem>
+          />
+        </NFormItem>
         <p class="section-note full-width">
           配对信息 5
           分钟内有效，仅展示一次。授权默认只读；允许来源按目标实际直连地址匹配，经网关时填写网关来源。
         </p>
-      </div></FormDialog
-    >
+      </div>
+    </FormDialog>
     <NAlert v-if="offeredCode" type="warning" title="请安全传递配对信息">
       有效至 {{ date(offeredExpiry) }}
       <NInput :value="offeredCode" type="textarea" readonly />
-      <NButton text @click="offeredCode = ''">隐藏配对信息</NButton>
+      <NButton text @click="offeredCode = ''">
+        隐藏配对信息
+      </NButton>
     </NAlert>
     <article v-for="job in jobs" :key="job.id" class="record-card">
       <div class="toolbar">
-        <strong>{{ job.name }}</strong
-        ><NTag :type="job.state === 'succeeded' ? 'success' : 'warning'">{{
-          jobStates[job.state]
-        }}</NTag>
+        <strong>{{ job.name }}</strong><NTag :type="job.state === 'succeeded' ? 'success' : 'warning'">
+          {{
+            jobStates[job.state]
+          }}
+        </NTag>
       </div>
       <p>
         {{ job.url }} · {{ stages[job.stage] }} · {{ date(job.updated_at) }}
       </p>
 
-      <NAlert v-if="job.error" type="warning">{{ job.error }}</NAlert>
+      <NAlert v-if="job.error" type="warning">
+        {{ job.error }}
+      </NAlert>
       <div
         v-if="job.state !== 'succeeded' && job.state !== 'abandoned'"
         class="toolbar"
@@ -339,26 +357,29 @@ onUnmounted(() => {
           v-if="job.state !== 'abandoning'"
           :disabled="busy"
           @click="resume(job)"
-          >继续连接</NButton
         >
+          继续连接
+        </NButton>
         <NPopconfirm
           :disabled="busy"
           positive-text="放弃并核对撤销"
           @positive-click="abandon(job)"
-          ><template #trigger
-            ><NButton type="error" :disabled="busy">{{
-              job.state === "abandoning" ? "继续放弃" : "放弃配对"
-            }}</NButton></template
-          >清除本机恢复材料，并尝试撤销已收到的目标授权。撤销未确认时，需要在目标按配对编号补做撤销。</NPopconfirm
         >
+          <template #trigger>
+            <NButton type="error" :disabled="busy">
+              {{
+                job.state === "abandoning" ? "继续放弃" : "放弃配对"
+              }}
+            </NButton>
+          </template>清除本机恢复材料，并尝试撤销已收到的目标授权。撤销未确认时，需要在目标按配对编号补做撤销。
+        </NPopconfirm>
       </div>
     </article>
     <section v-if="canIssue && offers.length" class="page-stack">
       <h3>连接授权</h3>
       <article v-for="pair in offers" :key="pair.id" class="record-card">
         <div class="toolbar">
-          <strong>{{ pair.name }}</strong
-          ><NTag>{{ offerStates[pair.state] }}</NTag>
+          <strong>{{ pair.name }}</strong><NTag>{{ offerStates[pair.state] }}</NTag>
         </div>
 
         <p>
@@ -375,12 +396,13 @@ onUnmounted(() => {
           :disabled="busy"
           positive-text="撤销授权"
           @positive-click="revoke(pair)"
-          ><template #trigger
-            ><NButton type="error" :disabled="busy"
-              >撤销配对及授权</NButton
-            ></template
-          >撤销后，对方服务器将无法继续连接本机。</NPopconfirm
         >
+          <template #trigger>
+            <NButton type="error" :disabled="busy">
+              撤销配对及授权
+            </NButton>
+          </template>撤销后，对方服务器将无法继续连接本机。
+        </NPopconfirm>
       </article>
     </section>
   </div>

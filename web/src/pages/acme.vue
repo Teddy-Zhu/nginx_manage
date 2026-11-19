@@ -369,7 +369,9 @@ useLiveRefresh(
           申请账户用于接收证书通知，DNS 授权用于自动验证域名。
         </p>
       </div>
-      <n-button :loading="busy" @click="load">刷新</n-button>
+      <n-button :loading="busy" @click="load">
+        刷新
+      </n-button>
     </div>
     <section v-if="route.query.from === 'request'" class="surface cert-section">
       <div class="cert-heading">
@@ -387,27 +389,28 @@ useLiveRefresh(
         </div>
         <router-link
           :to="{ path: '/certificate-requests', query: { new: '1' } }"
-          ><n-button :type="readyAccounts.length ? 'primary' : 'default'">{{
-            readyAccounts.length ? "继续申请证书" : "返回申请"
-          }}</n-button></router-link
         >
+          <n-button :type="readyAccounts.length ? 'primary' : 'default'">
+            {{
+              readyAccounts.length ? "继续申请证书" : "返回申请"
+            }}
+          </n-button>
+        </router-link>
       </div>
     </section>
     <n-tabs v-model:value="activeTab" type="segment" animated>
       <n-tab-pane name="accounts" tab="申请账户">
-        <n-alert type="info" :bordered="false"
-          >测试与正式环境使用独立账户。测试环境证书不受浏览器信任。<a
+        <n-alert type="info" :bordered="false">
+          测试与正式环境使用独立账户。测试环境证书不受浏览器信任。<a
             href="https://letsencrypt.org/repository/"
             target="_blank"
             rel="noopener noreferrer"
-            >查看 Let's Encrypt 服务条款</a
-          ></n-alert
-        >
+          >查看 Let's Encrypt 服务条款</a>
+        </n-alert>
         <div class="toolbar" style="margin-top: 20px">
-          <span class="muted">{{ accounts.length }} 个账户</span
-          ><n-button type="primary" :disabled="busy" @click="startAccount"
-            >添加账户</n-button
-          >
+          <span class="muted">{{ accounts.length }} 个账户</span><n-button type="primary" :disabled="busy" @click="startAccount">
+            添加账户
+          </n-button>
         </div>
         <FormDialog
           :show="accountEditing"
@@ -415,23 +418,24 @@ useLiveRefresh(
           :busy="busy"
           :submit-disabled="
             !accountForm.name.trim() ||
-            !accountForm.email.trim() ||
-            !accountForm.terms_agreed
+              !accountForm.email.trim() ||
+              !accountForm.terms_agreed
           "
           @submit="createAccount"
           @cancel="closeAccount"
         >
-          <n-form-item label="名称"
-            ><n-input v-model:value="accountForm.name" :maxlength="128"
-          /></n-form-item>
-          <n-form-item label="邮箱"
-            ><n-input
+          <n-form-item label="名称">
+            <n-input v-model:value="accountForm.name" :maxlength="128" />
+          </n-form-item>
+          <n-form-item label="邮箱">
+            <n-input
               v-model:value="accountForm.email"
               :maxlength="254"
               :input-props="{ type: 'email', autocomplete: 'email' }"
-          /></n-form-item>
-          <n-form-item label="证书用途"
-            ><n-select
+            />
+          </n-form-item>
+          <n-form-item label="证书用途">
+            <n-select
               v-model:value="accountForm.environment"
               :options="[
                 { label: '测试证书（不受浏览器信任）', value: 'staging' },
@@ -440,12 +444,13 @@ useLiveRefresh(
                   value: 'production',
                 },
               ]"
-          /></n-form-item>
-          <n-form-item
-            ><n-checkbox v-model:checked="accountForm.terms_agreed"
-              >已阅读并同意 Let's Encrypt 当前服务条款</n-checkbox
-            ></n-form-item
-          >
+            />
+          </n-form-item>
+          <n-form-item>
+            <n-checkbox v-model:checked="accountForm.terms_agreed">
+              已阅读并同意 Let's Encrypt 当前服务条款
+            </n-checkbox>
+          </n-form-item>
         </FormDialog>
         <n-empty
           v-if="!accounts.length && !accountEditing"
@@ -459,7 +464,9 @@ useLiveRefresh(
           <div class="section-heading">
             <div>
               <h2>{{ item.name }}</h2>
-              <p class="muted">{{ item.email }}</p>
+              <p class="muted">
+                {{ item.email }}
+              </p>
             </div>
             <div class="inline-gap">
               <n-tag
@@ -467,10 +474,11 @@ useLiveRefresh(
                 :type="
                   item.environment === 'production' ? 'warning' : 'default'
                 "
-                >{{
+              >
+                {{
                   item.environment === "production" ? "正式" : "测试"
-                }}</n-tag
-              ><n-tag
+                }}
+              </n-tag><n-tag
                 :bordered="false"
                 :type="
                   item.state === 'ready'
@@ -479,11 +487,14 @@ useLiveRefresh(
                       ? 'error'
                       : 'default'
                 "
-                >{{ states[item.state] }}</n-tag
               >
+                {{ states[item.state] }}
+              </n-tag>
             </div>
           </div>
-          <p v-if="item.last_error" class="error">{{ item.last_error }}</p>
+          <p v-if="item.last_error" class="error">
+            {{ item.last_error }}
+          </p>
           <p
             v-if="item.state === 'failed' && item.retry_after * 1000 > now"
             class="muted"
@@ -496,28 +507,30 @@ useLiveRefresh(
               v-if="item.state === 'failed'"
               :disabled="busy || item.retry_after * 1000 > now"
               @click="retryAccount(item)"
-              >重试注册</n-button
-            ><n-button
+            >
+              重试注册
+            </n-button><n-button
               type="error"
               :disabled="busy || activeAccount(item)"
               @click="removeAccount(item)"
-              >移除本机账户</n-button
             >
+              移除本机账户
+            </n-button>
           </div>
         </section>
       </n-tab-pane>
       <n-tab-pane name="credentials" tab="DNS 授权">
-        <n-alert type="info" :bordered="false"
-          >授权用于自动添加和清理域名验证记录，不修改网站解析。密钥保存后不会再次显示。</n-alert
-        >
+        <n-alert type="info" :bordered="false">
+          授权用于自动添加和清理域名验证记录，不修改网站解析。密钥保存后不会再次显示。
+        </n-alert>
         <div class="toolbar" style="margin-top: 20px">
-          <span class="muted">{{ credentials.length }} 组授权</span
-          ><n-button
+          <span class="muted">{{ credentials.length }} 组授权</span><n-button
             type="primary"
             :disabled="busy || !providers.length"
             @click="startCredential(null)"
-            >添加 DNS 授权</n-button
           >
+            添加 DNS 授权
+          </n-button>
         </div>
         <FormDialog
           :show="credentialEditing"
@@ -527,30 +540,33 @@ useLiveRefresh(
           @submit="saveCredential"
           @cancel="closeCredential"
         >
-          <n-form-item label="名称"
-            ><n-input v-model:value="credentialName" :maxlength="128"
-          /></n-form-item>
-          <n-form-item label="域名服务商"
-            ><n-select
+          <n-form-item label="名称">
+            <n-input v-model:value="credentialName" :maxlength="128" />
+          </n-form-item>
+          <n-form-item label="域名服务商">
+            <n-select
               v-model:value="provider"
               :options="providerOptions"
               :disabled="!!originalCredential || busy"
               @update:value="changeProvider"
-          /></n-form-item>
-          <n-form-item v-if="originalCredential"
-            ><n-checkbox
+            />
+          </n-form-item>
+          <n-form-item v-if="originalCredential">
+            <n-checkbox
               v-model:checked="replaceSecrets"
               @update:checked="changeReplace"
-              >更新授权密钥</n-checkbox
-            ></n-form-item
-          >
-          <template v-if="replaceSecrets"
-            ><n-form-item
+            >
+              更新授权密钥
+            </n-checkbox>
+          </n-form-item>
+          <template v-if="replaceSecrets">
+            <n-form-item
               v-for="field in fields"
               :key="field.key"
               :label="field.label"
               :required="field.required"
-              ><n-input
+            >
+              <n-input
                 v-model:value="secrets[field.key]"
                 type="password"
                 show-password-on="click"
@@ -558,9 +574,13 @@ useLiveRefresh(
                 :input-props="{
                   autocomplete: 'new-password',
                   spellcheck: false,
-                }" /></n-form-item
-          ></template>
-          <p v-else class="muted">保留已保存的授权密钥。</p>
+                }"
+              />
+            </n-form-item>
+          </template>
+          <p v-else class="muted">
+            保留已保存的授权密钥。
+          </p>
         </FormDialog>
         <n-empty
           v-if="!credentials.length && !credentialEditing"
@@ -579,14 +599,15 @@ useLiveRefresh(
               </p>
             </div>
             <div class="inline-gap">
-              <n-button :disabled="busy" @click="startCredential(item)"
-                >编辑</n-button
-              ><n-button
+              <n-button :disabled="busy" @click="startCredential(item)">
+                编辑
+              </n-button><n-button
                 type="error"
                 :disabled="busy"
                 @click="removeCredential(item)"
-                >删除</n-button
               >
+                删除
+              </n-button>
             </div>
           </div>
           <p class="muted">

@@ -406,16 +406,20 @@ useLiveRefresh(
     <div class="cert-heading">
       <div>
         <h2>申请与续期</h2>
-        <p class="muted">申请免费证书，并设置到期前自动续期。</p>
+        <p class="muted">
+          申请免费证书，并设置到期前自动续期。
+        </p>
       </div>
       <div class="cert-actions">
-        <n-button :loading="busy" @click="load">刷新</n-button
-        ><n-button
+        <n-button :loading="busy" @click="load">
+          刷新
+        </n-button><n-button
           type="primary"
           :disabled="busy || !accountOptions.length || editing"
           @click="start"
-          >申请证书</n-button
         >
+          申请证书
+        </n-button>
       </div>
     </div>
     <section
@@ -429,8 +433,13 @@ useLiveRefresh(
       <div class="cert-actions">
         <router-link
           :to="{ path: '/acme', query: { tab: 'accounts', from: 'request' } }"
-          ><n-button type="primary">添加申请账户</n-button></router-link
-        ><router-link to="/certificates">导入已有证书</router-link>
+        >
+          <n-button type="primary">
+            添加申请账户
+          </n-button>
+        </router-link><router-link to="/certificates">
+          导入已有证书
+        </router-link>
       </div>
     </section>
     <section
@@ -447,8 +456,9 @@ useLiveRefresh(
             path: '/acme',
             query: { tab: 'credentials', from: 'request' },
           }"
-          >添加 DNS 授权</router-link
-        ><span class="muted">也可在申请时选择网站验证。</span>
+        >
+          添加 DNS 授权
+        </router-link><span class="muted">也可在申请时选择网站验证。</span>
       </div>
     </section>
     <FormDialog
@@ -460,74 +470,84 @@ useLiveRefresh(
       @submit="create"
       @cancel="close"
     >
-      <p class="muted">提交后开始验证域名，可在申请记录中查看结果。</p>
+      <p class="muted">
+        提交后开始验证域名，可在申请记录中查看结果。
+      </p>
       <div class="cert-form-grid">
-        <n-form-item label="证书名称" required
-          ><n-input
+        <n-form-item label="证书名称" required>
+          <n-input
             v-model:value="form.name"
             :maxlength="128"
             placeholder="便于识别，例如：公司网站"
-        /></n-form-item>
-        <n-form-item label="申请账户" required
-          ><n-select v-model:value="form.account_id" :options="accountOptions"
-        /></n-form-item>
+          />
+        </n-form-item>
+        <n-form-item label="申请账户" required>
+          <n-select v-model:value="form.account_id" :options="accountOptions" />
+        </n-form-item>
       </div>
       <n-alert
         v-if="selectedAccount?.environment === 'staging'"
         type="warning"
         :bordered="false"
         class="form-notice"
-        >此账户用于测试，申请的证书不受浏览器信任。正式网站请选择正式账户。</n-alert
       >
-      <n-form-item label="验证方式"
-        ><n-select
+        此账户用于测试，申请的证书不受浏览器信任。正式网站请选择正式账户。
+      </n-alert>
+      <n-form-item label="验证方式">
+        <n-select
           :value="form.challenge_type"
           :options="[
             { label: 'DNS 验证（支持通配域名）', value: 'dns-01' },
             { label: '网站验证（需要公网 80 端口）', value: 'http-01' },
           ]"
           @update:value="changeChallengeType"
-      /></n-form-item>
+        />
+      </n-form-item>
       <template v-if="form.challenge_type === 'dns-01'">
-        <n-form-item label="DNS 授权" required
-          ><n-select
+        <n-form-item label="DNS 授权" required>
+          <n-select
             v-model:value="form.credential_id"
             :options="credentialOptions"
             placeholder="选择域名所在服务商的授权"
-        /></n-form-item>
+          />
+        </n-form-item>
         <n-alert
           v-if="!credentialOptions.length"
           type="warning"
           :bordered="false"
           class="form-notice"
-          >尚未添加 DNS 授权，请先前往
+        >
+          尚未添加 DNS 授权，请先前往
           <router-link
             :to="{
               path: '/acme',
               query: { tab: 'credentials', from: 'request' },
             }"
-            >申请设置</router-link
           >
-          添加，或改用网站验证。</n-alert
-        >
+            申请设置
+          </router-link>
+          添加，或改用网站验证。
+        </n-alert>
         <p v-else class="muted form-notice">
           申请时会临时添加域名验证记录，完成后自动清理。
         </p>
       </template>
       <template v-else>
-        <n-alert type="info" :bordered="false" class="form-notice"
-          >域名需指向这台服务器，公网 80 端口需可访问，并在
-          <router-link to="/nginx">网站管理</router-link>
-          中启用域名验证入口。通配域名请改用 DNS 验证。</n-alert
-        >
-        <n-form-item
-          ><n-checkbox v-model:checked="form.http01_confirmed"
-            >已配置网站验证入口，并确认域名指向及公网 80 端口可访问</n-checkbox
-          ></n-form-item
-        >
+        <n-alert type="info" :bordered="false" class="form-notice">
+          域名需指向这台服务器，公网 80 端口需可访问，并在
+          <router-link to="/nginx">
+            网站管理
+          </router-link>
+          中启用域名验证入口。通配域名请改用 DNS 验证。
+        </n-alert>
+        <n-form-item>
+          <n-checkbox v-model:checked="form.http01_confirmed">
+            已配置网站验证入口，并确认域名指向及公网 80 端口可访问
+          </n-checkbox>
+        </n-form-item>
       </template>
-      <n-form-item label="申请域名" required
-        ><ValueListInput
+      <n-form-item label="申请域名" required>
+        <ValueListInput
           v-model:value="domainEntries"
           item-label="域名"
           :max="64"
@@ -537,16 +557,17 @@ useLiveRefresh(
               ? 'example.com 或 *.example.com'
               : 'example.com'
           "
-      /></n-form-item>
-      <n-form-item label="备注（选填）"
-        ><n-input v-model:value="form.notes" :maxlength="2048"
-      /></n-form-item>
+        />
+      </n-form-item>
+      <n-form-item label="备注（选填）">
+        <n-input v-model:value="form.notes" :maxlength="2048" />
+      </n-form-item>
     </FormDialog>
     <div class="cert-heading">
       <h2>申请记录</h2>
-      <router-link v-if="route.query.certificate" to="/certificate-requests"
-        >查看全部申请</router-link
-      >
+      <router-link v-if="route.query.certificate" to="/certificate-requests">
+        查看全部申请
+      </router-link>
     </div>
     <n-empty
       v-if="!visibleProfiles.length"
@@ -565,16 +586,19 @@ useLiveRefresh(
       <div class="cert-heading">
         <div>
           <h2>{{ item.name }}</h2>
-          <p v-if="item.notes" class="muted">{{ item.notes }}</p>
+          <p v-if="item.notes" class="muted">
+            {{ item.notes }}
+          </p>
         </div>
         <div class="cert-actions">
           <n-tag
             :bordered="false"
             :type="item.environment === 'staging' ? 'warning' : 'default'"
-            >{{
+          >
+            {{
               item.environment === "production" ? "正式证书" : "测试证书"
-            }}</n-tag
-          ><n-tag
+            }}
+          </n-tag><n-tag
             :bordered="false"
             :type="
               item.state === 'issued'
@@ -583,16 +607,21 @@ useLiveRefresh(
                   ? 'error'
                   : 'default'
             "
-            >{{ profileStates[item.state] }}</n-tag
           >
+            {{ profileStates[item.state] }}
+          </n-tag>
         </div>
       </div>
       <div class="cert-actions">
-        <n-tag v-for="domain in item.domains" :key="domain" size="small">{{
-          domain
-        }}</n-tag>
+        <n-tag v-for="domain in item.domains" :key="domain" size="small">
+          {{
+            domain
+          }}
+        </n-tag>
       </div>
-      <p v-if="item.last_error" class="error">{{ item.last_error }}</p>
+      <p v-if="item.last_error" class="error">
+        {{ item.last_error }}
+      </p>
       <p v-if="item.retry_after * 1000 > now" class="muted">
         可重试时间：{{ date(item.retry_after) }}
       </p>
@@ -625,70 +654,81 @@ useLiveRefresh(
         <n-button
           v-if="
             item.state === 'idle' ||
-            item.state === 'failed' ||
-            item.state === 'recovery_required'
+              item.state === 'failed' ||
+              item.state === 'recovery_required'
           "
           type="primary"
           :disabled="!canIssue(item)"
           @click="issue(item, false)"
-          >{{
+        >
+          {{
             item.state === "idle"
               ? "继续申请"
               : item.current_order_id
                 ? "继续原申请"
                 : "重试申请"
-          }}</n-button
-        >
+          }}
+        </n-button>
         <router-link
           v-if="item.certificate_id"
           :to="{
             path: '/certificates',
             query: { certificate: item.certificate_id },
           }"
-          ><n-button>查看证书</n-button></router-link
         >
+          <n-button>查看证书</n-button>
+        </router-link>
         <router-link
           v-if="item.certificate_id"
           :to="{
             path: '/certificate-deployments',
             query: { certificate: item.certificate_id },
           }"
-          ><n-button>用于网站</n-button></router-link
         >
+          <n-button>用于网站</n-button>
+        </router-link>
         <n-button
           v-if="item.state !== 'archived'"
           :disabled="busy"
           @click="openPolicy(item)"
-          >续期设置</n-button
         >
+          续期设置
+        </n-button>
         <n-button
           v-if="item.current_order_id && item.state !== 'archived'"
           :disabled="!canIssue(item)"
           @click="issue(item, true)"
-          >重新申请</n-button
         >
-        <n-button :disabled="busy" @click="showOrders(item)">{{
-          selected === item.id ? "收起记录" : "申请详情"
-        }}</n-button>
+          重新申请
+        </n-button>
+        <n-button :disabled="busy" @click="showOrders(item)">
+          {{
+            selected === item.id ? "收起记录" : "申请详情"
+          }}
+        </n-button>
         <n-button
           v-if="item.state !== 'archived'"
           quaternary
           type="error"
           :disabled="busy || item.state === 'issuing'"
           @click="archive(item)"
-          >停用申请</n-button
         >
+          停用申请
+        </n-button>
       </div>
       <div v-if="selected === item.id">
         <n-empty v-if="!orders.length" description="尚无执行记录" />
         <article v-for="order in orders" :key="order.id" class="cert-record">
           <div class="cert-heading">
-            <span>{{ date(order.created_at) }}</span
-            ><n-tag :bordered="false">{{
-              taskStates[order.state] ?? "处理中"
-            }}</n-tag>
+            <span>{{ date(order.created_at) }}</span><n-tag :bordered="false">
+              {{
+                taskStates[order.state] ?? "处理中"
+              }}
+            </n-tag>
           </div>
-          <p v-if="order.last_error" class="error">{{ order.last_error }}</p>
+          <p v-if="order.last_error" class="error">
+            {{ order.last_error }}
+          </p>
           <p v-if="order.terminal" class="muted">
             本次验证已结束，未完成清理时请继续原申请。
           </p>
@@ -699,20 +739,21 @@ useLiveRefresh(
             v-if="order.task_id"
             quaternary
             @click="inspectTask(order.task_id, '证书申请日志')"
-            >查看日志</n-button
           >
+            查看日志
+          </n-button>
         </article>
       </div>
     </section>
     <div v-if="offset || profiles.length >= 100" class="cert-heading">
-      <n-button :disabled="busy || offset === 0" @click="changePage(-1)"
-        >上一页</n-button
-      ><span class="muted">第 {{ offset / 100 + 1 }} 页</span
-      ><n-button
+      <n-button :disabled="busy || offset === 0" @click="changePage(-1)">
+        上一页
+      </n-button><span class="muted">第 {{ offset / 100 + 1 }} 页</span><n-button
         :disabled="busy || profiles.length < 100"
         @click="changePage(1)"
-        >下一页</n-button
       >
+        下一页
+      </n-button>
     </div>
     <FormDialog
       :show="!!policyID"
@@ -721,27 +762,27 @@ useLiveRefresh(
       @submit="savePolicy"
       @cancel="closePolicy"
     >
-      <n-form-item
-        ><n-checkbox v-model:checked="policy.auto_renew"
-          >到期前自动续期</n-checkbox
-        ></n-form-item
-      >
+      <n-form-item>
+        <n-checkbox v-model:checked="policy.auto_renew">
+          到期前自动续期
+        </n-checkbox>
+      </n-form-item>
       <p class="muted form-notice">
         按证书到期时间自动申请续期；连续失败时暂停并保留原证书。
       </p>
-      <n-form-item
-        ><n-checkbox v-model:checked="policy.auto_deploy"
-          >续期后自动更新已使用此证书的网站</n-checkbox
-        ></n-form-item
-      >
+      <n-form-item>
+        <n-checkbox v-model:checked="policy.auto_deploy">
+          续期后自动更新已使用此证书的网站
+        </n-checkbox>
+      </n-form-item>
       <p class="muted form-notice">
         首次使用需在网站设置中选择证书并应用。关闭后，网站证书需手动更新。
       </p>
-      <n-form-item
-        ><n-checkbox v-model:checked="policy.reset_failures"
-          >清除失败记录并恢复自动续期</n-checkbox
-        ></n-form-item
-      >
+      <n-form-item>
+        <n-checkbox v-model:checked="policy.reset_failures">
+          清除失败记录并恢复自动续期
+        </n-checkbox>
+      </n-form-item>
     </FormDialog>
   </CertificateWorkspace>
 </template>

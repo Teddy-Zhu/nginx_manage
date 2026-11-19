@@ -95,12 +95,13 @@ watch(
     @submit="save"
     @cancel="show = false"
   >
-    <n-alert type="info" :bordered="false"
-      >常用模块已内置。启用可选功能后，请应用配置使其生效。</n-alert
-    >
+    <n-alert type="info" :bordered="false">
+      常用模块已内置。启用可选功能后，请应用配置使其生效。
+    </n-alert>
     <div class="toolbar" style="margin-top: 16px">
-      <span class="muted">Nginx {{ report?.version || "版本未知" }}</span
-      ><n-button :loading="busy" @click="load">刷新</n-button>
+      <span class="muted">Nginx {{ report?.version || "版本未知" }}</span><n-button :loading="busy" @click="load">
+        刷新
+      </n-button>
     </div>
     <template v-if="report">
       <n-alert
@@ -108,8 +109,9 @@ watch(
         type="warning"
         :bordered="false"
         style="margin-bottom: 16px"
-        >{{ report.reason }}</n-alert
       >
+        {{ report.reason }}
+      </n-alert>
       <n-empty
         v-if="!options.length"
         description="当前没有可选模块，内置功能已可使用。"
@@ -129,18 +131,22 @@ watch(
             <p v-if="item.features.length" class="muted">
               提供能力：{{ item.features.join("、") }}
             </p>
-            <p v-if="item.reason" class="muted">{{ item.reason }}</p>
+            <p v-if="item.reason" class="muted">
+              {{ item.reason }}
+            </p>
           </div>
           <div class="inline-gap">
             <n-tag
               :type="item.available ? 'success' : 'warning'"
               :bordered="false"
-              >{{ item.available ? "可选择" : "不可选择" }}</n-tag
-            ><n-tag
+            >
+              {{ item.available ? "可选择" : "不可选择" }}
+            </n-tag><n-tag
               :type="item.running ? 'success' : 'default'"
               :bordered="false"
-              >{{ item.running ? "已启用" : "未启用" }}</n-tag
             >
+              {{ item.running ? "已启用" : "未启用" }}
+            </n-tag>
           </div>
         </div>
         <n-alert
@@ -148,8 +154,9 @@ watch(
           type="warning"
           :bordered="false"
           style="margin-top: 16px"
-          >所选模块包含未批准或不可用版本。请移除或选择可用版本后保存。</n-alert
         >
+          所选模块包含未批准或不可用版本。请移除或选择可用版本后保存。
+        </n-alert>
       </template>
     </template>
   </FormDialog>

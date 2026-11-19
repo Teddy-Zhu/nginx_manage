@@ -221,17 +221,20 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
   <div class="page-stack">
     <div class="page-toolbar">
       <p class="muted">
-        创建访问名单后，在<router-link to="/nginx">网站管理</router-link
-        >中选择使用并应用。
+        创建访问名单后，在<router-link to="/nginx">
+          网站管理
+        </router-link>中选择使用并应用。
       </p>
       <div class="inline-gap">
-        <n-button :disabled="busy" @click="sourceOpen = true"
-          >国家 IP 数据</n-button
-        >
-        <n-button :loading="busy" @click="load">刷新</n-button>
-        <n-button type="primary" :disabled="busy" @click="open(null)"
-          >新建访问名单</n-button
-        >
+        <n-button :disabled="busy" @click="sourceOpen = true">
+          国家 IP 数据
+        </n-button>
+        <n-button :loading="busy" @click="load">
+          刷新
+        </n-button>
+        <n-button type="primary" :disabled="busy" @click="open(null)">
+          新建访问名单
+        </n-button>
       </div>
     </div>
     <section class="surface">
@@ -253,8 +256,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       type="warning"
       :bordered="false"
       class="access-notice"
-      >{{ geoError }}</n-alert
     >
+      {{ geoError }}
+    </n-alert>
     <GeoIPSourcePanel
       :state="geoIP"
       :writable="!busy"
@@ -276,14 +280,14 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
     :form-disabled="selected?.editable === false"
     :submit-disabled="
       selected?.editable === false ||
-      (countries.length > 0 && !geoIP?.ready) ||
-      (!!selected &&
-        !dirty &&
-        !(
-          countries.length &&
-          geoIP &&
-          geoIP.updated_at !== selected.geoip_updated_at
-        ))
+        (countries.length > 0 && !geoIP?.ready) ||
+        (!!selected &&
+          !dirty &&
+          !(
+            countries.length &&
+            geoIP &&
+            geoIP.updated_at !== selected.geoip_updated_at
+          ))
     "
     @submit="save"
     @cancel="close"
@@ -293,8 +297,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         v-if="selected && !selected.editable"
         type="warning"
         :bordered="false"
-        >{{ selected.reason }}</n-alert
       >
+        {{ selected.reason }}
+      </n-alert>
       <n-form-item :show-feedback="false" label="名单名称">
         <n-input
           v-model:value="name"
@@ -326,7 +331,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
               <strong>白名单</strong><span>仅允许名单内访问</span>
             </NRadio>
           </NRadioGroup>
-          <p class="section-note">{{ ruleSummary }}</p>
+          <p class="section-note">
+            {{ ruleSummary }}
+          </p>
         </template>
         <p v-else>
           {{
@@ -341,10 +348,8 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
       <section class="access-section">
         <div class="access-section-heading">
           <h3>名单内容</h3>
-          <span class="section-note"
-            >{{ addressCount }} 个地址 ·
-            {{ countries.length }} 个国家或地区</span
-          >
+          <span class="section-note">{{ addressCount }} 个地址 ·
+            {{ countries.length }} 个国家或地区</span>
         </div>
         <p class="section-note">
           IP 和国家可以同时添加，命中其中任意一项即可匹配名单。
@@ -376,7 +381,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 placeholder="搜索并选择国家或地区"
               />
             </n-form-item>
-            <p class="section-note">使用国家 IP 数据识别访问来源。</p>
+            <p class="section-note">
+              使用国家 IP 数据识别访问来源。
+            </p>
             <n-alert
               v-if="countries.length && (!geoIP?.ready || geoError)"
               type="warning"
@@ -388,8 +395,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
                 type="primary"
                 :disabled="busy || selected?.editable === false"
                 @click="sourceOpen = true"
-                >管理国家数据</n-button
               >
+                管理国家数据
+              </n-button>
             </n-alert>
             <p v-if="selected?.geoip_updated_at" class="section-note">
               名单数据更新于
@@ -402,14 +410,15 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         <n-alert
           v-if="
             mode === 'allowlist' &&
-            !addressCount &&
-            !countries.length &&
-            (!selected || selected.editable)
+              !addressCount &&
+              !countries.length &&
+              (!selected || selected.editable)
           "
           type="warning"
           :bordered="false"
-          >白名单为空时，将拒绝所有访问。</n-alert
         >
+          白名单为空时，将拒绝所有访问。
+        </n-alert>
       </section>
       <n-form-item :show-feedback="false" label="备注（可选）">
         <n-input
@@ -442,8 +451,9 @@ onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
         type="error"
         :disabled="busy || dirty || !!affected.length"
         @click="remove"
-        >删除</n-button
       >
+        删除
+      </n-button>
     </template>
   </FormDialog>
 </template>

@@ -79,10 +79,7 @@ function remove(index: number) {
     <div v-for="(row, index) in rows" :key="index" class="upstream-member">
       <div class="member-heading">
         <div>
-          <strong>服务器 {{ index + 1 }}</strong
-          ><span v-if="!row.details" class="section-note"
-            >权重 {{ row.weight ?? 1 }}{{ row.backup ? " · 备用" : "" }}</span
-          >
+          <strong>服务器 {{ index + 1 }}</strong><span v-if="!row.details" class="section-note">权重 {{ row.weight ?? 1 }}{{ row.backup ? " · 备用" : "" }}</span>
         </div>
         <n-button
           size="small"
@@ -90,8 +87,9 @@ function remove(index: number) {
           :disabled="disabled"
           :aria-label="`移除服务器 ${index + 1}`"
           @click="remove(index)"
-          >移除</n-button
         >
+          移除
+        </n-button>
       </div>
       <EndpointInput
         v-model:value="row.address"
@@ -104,40 +102,36 @@ function remove(index: number) {
           attr-type="button"
           :aria-expanded="row.details"
           @click="row.details = !row.details"
-          >{{ row.details ? "收起负载与重试设置" : "负载与重试设置" }}</n-button
         >
+          {{ row.details ? "收起负载与重试设置" : "负载与重试设置" }}
+        </n-button>
       </div>
       <div v-show="row.details" class="member-options field-row">
-        <label class="field-label"
-          >权重<n-input-number
-            v-model:value="row.weight"
-            :min="1"
-            :max="256"
-            :disabled="disabled"
-            @update:value="update"
+        <label class="field-label">权重<n-input-number
+          v-model:value="row.weight"
+          :min="1"
+          :max="256"
+          :disabled="disabled"
+          @update:value="update"
         /></label>
-        <label class="field-label"
-          >失败次数<n-input-number
-            v-model:value="row.maxFails"
-            :min="0"
-            :max="100"
-            :disabled="disabled"
-            @update:value="update"
+        <label class="field-label">失败次数<n-input-number
+          v-model:value="row.maxFails"
+          :min="0"
+          :max="100"
+          :disabled="disabled"
+          @update:value="update"
         /></label>
-        <label class="field-label member-interval"
-          >重试间隔<UnitInput
-            v-model:value="row.failTimeout"
-            kind="time"
-            :disabled="disabled"
-            @update:value="update"
+        <label class="field-label member-interval">重试间隔<UnitInput
+          v-model:value="row.failTimeout"
+          kind="time"
+          :disabled="disabled"
+          @update:value="update"
         /></label>
-        <label class="field-label member-backup"
-          >备用<span class="field-toggle"
-            ><n-switch
-              v-model:value="row.backup"
-              :disabled="disabled"
-              @update:value="update" /></span
-        ></label>
+        <label class="field-label member-backup">备用<span class="field-toggle"><n-switch
+          v-model:value="row.backup"
+          :disabled="disabled"
+          @update:value="update"
+        /></span></label>
       </div>
     </div>
     <n-button
@@ -146,8 +140,9 @@ function remove(index: number) {
       dashed
       :disabled="disabled || rows.length >= 128"
       @click="rows.push(blank())"
-      >＋ 添加服务器</n-button
     >
+      ＋ 添加服务器
+    </n-button>
   </div>
 </template>
 

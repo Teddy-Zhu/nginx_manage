@@ -44,8 +44,12 @@ const flag = (value: boolean | null) =>
       {{ registrationNames[registration.state] }} /
       {{ registration.verified ? "通过" : "未通过" }}
     </dd>
-    <dt v-if="registration.operation_id">操作编号</dt>
-    <dd v-if="registration.operation_id">{{ registration.operation_id }}</dd>
+    <dt v-if="registration.operation_id">
+      操作编号
+    </dt>
+    <dd v-if="registration.operation_id">
+      {{ registration.operation_id }}
+    </dd>
   </dl>
   <n-alert v-if="registration.reason" type="warning" :bordered="false">
     {{ registration.reason }}
@@ -73,13 +77,12 @@ const flag = (value: boolean | null) =>
               size="small"
               :type="
                 policy.runtime &&
-                policy.permanent &&
-                policy.runtime.hash === policy.permanent.hash
+                  policy.permanent &&
+                  policy.runtime.hash === policy.permanent.hash
                   ? 'default'
                   : 'warning'
               "
-              >{{ comparison(policy) }}</n-tag
-            >
+            >{{ comparison(policy) }}</n-tag>
           </span>
         </template>
         <dl v-if="policy.active">
@@ -94,7 +97,9 @@ const flag = (value: boolean | null) =>
           class="variant"
         >
           <strong>{{ variant.label }}</strong>
-          <p v-if="!variant.settings" class="muted">未观察到</p>
+          <p v-if="!variant.settings" class="muted">
+            未观察到
+          </p>
           <dl v-else>
             <dt>目标 / 优先级</dt>
             <dd>

@@ -209,11 +209,15 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
 <template>
   <section class="surface page-stack">
     <h4>手动封禁与解封</h4>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <NAlert v-if="pending" type="warning"
-      >提交结果待确认，可继续原操作。</NAlert
-    >
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
+    <NAlert v-if="pending" type="warning">
+      提交结果待确认，可继续原操作。
+    </NAlert>
     <NFormItem label="IP 地址">
       <NInput
         v-model:value="ip"
@@ -227,21 +231,24 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         :loading="checking"
         :disabled="busy || !!pending || !ip.trim()"
         @click="inspect"
-        >查询地址状态</NButton
       >
+        查询地址状态
+      </NButton>
       <NButton
         v-if="pending"
         :loading="busy"
         @click="change(pending.input.action)"
-        >继续原操作</NButton
       >
+        继续原操作
+      </NButton>
     </div>
     <template v-if="status">
       <NAlert
         v-if="status.reason"
         :type="status.available ? 'info' : 'warning'"
-        >{{ status.reason }}</NAlert
       >
+        {{ status.reason }}
+      </NAlert>
       <template v-if="status.available">
         <p>
           地址 {{ status.ip }} · 更新于
@@ -263,32 +270,40 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
             :disabled="!ready || !status.can_ban"
             @positive-click="change('ban')"
           >
-            <template #trigger
-              ><NButton type="warning" :disabled="!ready || !status.can_ban"
-                >封禁地址</NButton
-              ></template
-            >
+            <template #trigger>
+              <NButton type="warning" :disabled="!ready || !status.can_ban">
+                封禁地址
+              </NButton>
+            </template>
             确认在 {{ jail }} 封禁
             {{ status.ip }}？已封禁的地址不会重复封禁或续期。
           </NPopconfirm>
           <NPopconfirm :disabled="!ready" @positive-click="change('unban')">
-            <template #trigger
-              ><NButton :disabled="!ready">解封地址</NButton></template
-            >
+            <template #trigger>
+              <NButton :disabled="!ready">
+                解封地址
+              </NButton>
+            </template>
             确认从 {{ jail }} 解封 {{ status.ip }}？
           </NPopconfirm>
         </div>
       </template>
     </template>
-    <p v-if="!moduleEnabled">登录防护已停用，当前仅可查看。</p>
+    <p v-if="!moduleEnabled">
+      登录防护已停用，当前仅可查看。
+    </p>
     <div class="toolbar">
       <h4>手动操作记录</h4>
-      <NButton size="small" :loading="reading" @click="refresh"
-        >刷新记录</NButton
-      >
+      <NButton size="small" :loading="reading" @click="refresh">
+        刷新记录
+      </NButton>
     </div>
-    <NAlert v-if="historyError" type="error">{{ historyError }}</NAlert>
-    <p v-if="active">存在尚未结束的手动操作，完成后可提交新操作。</p>
+    <NAlert v-if="historyError" type="error">
+      {{ historyError }}
+    </NAlert>
+    <p v-if="active">
+      存在尚未结束的手动操作，完成后可提交新操作。
+    </p>
     <p v-if="loaded && !history.length">
       最近的手动操作中没有当前防护规则的记录。
     </p>
@@ -300,7 +315,9 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         {{ new Date(task.created_at * 1000).toLocaleString() }}
       </p>
 
-      <NAlert v-if="task.error" type="warning">{{ task.error }}</NAlert>
+      <NAlert v-if="task.error" type="warning">
+        {{ task.error }}
+      </NAlert>
       <template v-if="task.result">
         <p>
           {{ submissionNames[task.result.submission] }} · 状态{{

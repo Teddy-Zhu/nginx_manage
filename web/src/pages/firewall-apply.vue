@@ -380,24 +380,26 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
 </script>
 <template>
   <div class="page-toolbar">
-    <n-space
-      ><n-button :disabled="busy || !canManage" @click="load">刷新状态</n-button
-      ><n-button
+    <n-space>
+      <n-button :disabled="busy || !canManage" @click="load">
+        刷新状态
+      </n-button><n-button
         :disabled="
           busy ||
-          !canManage ||
-          !view?.can_plan ||
-          (action === 'apply'
-            ? !stored?.version || managementDisabled !== false
-            : view?.confirmed_action !== 'apply') ||
-          active ||
-          uncertain ||
-          preparing
+            !canManage ||
+            !view?.can_plan ||
+            (action === 'apply'
+              ? !stored?.version || managementDisabled !== false
+              : view?.confirmed_action !== 'apply') ||
+            active ||
+            uncertain ||
+            preparing
         "
         @click="generate"
-        >生成{{ action === "remove" ? "移除" : "应用" }}计划</n-button
-      ></n-space
-    >
+      >
+        生成{{ action === "remove" ? "移除" : "应用" }}计划
+      </n-button>
+    </n-space>
   </div>
   <n-select
     :value="action"
@@ -406,36 +408,45 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
     aria-label="防火墙动作"
     @update:value="setAction"
   />
-  <n-alert v-if="!canManage" type="warning" :bordered="false"
-    >需要读取和安全写入权限。</n-alert
-  >
-  <n-alert v-if="error" type="error" :bordered="false" class="notice">{{
-    error
-  }}</n-alert>
-  <n-alert v-if="view?.reason" type="warning" :bordered="false" class="notice"
-    >暂时无法应用规则。<RouterLink to="/management-listener"
-      >检查安全访问设置</RouterLink
-    ></n-alert
-  >
-  <n-alert type="info" :bordered="false" class="notice"
-    >修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink
+  <n-alert v-if="!canManage" type="warning" :bordered="false">
+    需要读取和安全写入权限。
+  </n-alert>
+  <n-alert v-if="error" type="error" :bordered="false" class="notice">
+    {{
+      error
+    }}
+  </n-alert>
+  <n-alert v-if="view?.reason" type="warning" :bordered="false" class="notice">
+    暂时无法应用规则。<RouterLink to="/management-listener">
+      检查安全访问设置
+    </RouterLink>
+  </n-alert>
+  <n-alert type="info" :bordered="false" class="notice">
+    修改后需在 120 秒内确认连接正常，超时自动恢复。请通过<RouterLink
       to="/management-listener"
-      >安全管理入口</RouterLink
-    >访问面板后应用规则。云服务器还需放行对应的安全组端口。</n-alert
-  >
+    >
+      安全管理入口
+    </RouterLink>访问面板后应用规则。云服务器还需放行对应的安全组端口。
+  </n-alert>
   <section v-if="view" class="surface">
     <h3>当前规则状态</h3>
     <p v-if="stored?.version">
-      <template v-if="view.confirmed_action === 'apply'">{{
-        view.confirmed_version === stored.version ? "已生效" : "有修改待应用"
-      }}</template>
-      <template v-else-if="view.confirmed_action === 'remove'"
-        >规则已移除</template
-      >
-      <template v-else>尚未应用</template>
+      <template v-if="view.confirmed_action === 'apply'">
+        {{
+          view.confirmed_version === stored.version ? "已生效" : "有修改待应用"
+        }}
+      </template>
+      <template v-else-if="view.confirmed_action === 'remove'">
+        规则已移除
+      </template>
+      <template v-else>
+        尚未应用
+      </template>
     </p>
     <p v-else class="muted">
-      尚未添加规则。<RouterLink to="/firewall-rules">添加规则</RouterLink>
+      尚未添加规则。<RouterLink to="/firewall-rules">
+        添加规则
+      </RouterLink>
     </p>
     <n-data-table
       v-if="view.protections.length"
@@ -449,12 +460,15 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
       type="info"
       :bordered="false"
       class="notice"
-      >当前授权范围内无已确认规则需要移除。</n-alert
     >
-    <n-button v-if="canDisable" :disabled="busy" @click="disableManagement"
-      >停用防火墙管理</n-button
-    >
-    <p v-if="managementDisabled" class="muted">防火墙管理已停用。</p>
+      当前授权范围内无已确认规则需要移除。
+    </n-alert>
+    <n-button v-if="canDisable" :disabled="busy" @click="disableManagement">
+      停用防火墙管理
+    </n-button>
+    <p v-if="managementDisabled" class="muted">
+      防火墙管理已停用。
+    </p>
     <p v-if="view.confirmed_action === 'remove'" class="muted">
       本面板添加的规则已移除，已保存的配置保留。其他来源的防火墙规则继续生效。
     </p>
@@ -495,24 +509,27 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
       v-if="preparing"
       :disabled="busy || preparation.state === 'cancelling'"
       @click="cancelPreparation"
-      >取消准备</n-button
     >
+      取消准备
+    </n-button>
   </section>
   <section
     v-if="
       plan &&
-      !preparing &&
-      (!plan.preparation || plan.preparation.state === 'ready')
+        !preparing &&
+        (!plan.preparation || plan.preparation.state === 'ready')
     "
     class="surface"
   >
     <div class="page-toolbar">
       <h3>{{ plan.action === "remove" ? "移除" : "应用" }}计划</h3>
-      <n-tag type="info">{{
-        plan.action === "remove"
-          ? "移除本系统规则"
-          : `${plan.generated_rules} 条规则`
-      }}</n-tag>
+      <n-tag type="info">
+        {{
+          plan.action === "remove"
+            ? "移除本系统规则"
+            : `${plan.generated_rules} 条规则`
+        }}
+      </n-tag>
     </div>
     <dl>
       <dt>管理监听</dt>
@@ -553,25 +570,28 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
       type="warning"
       :disabled="
         busy ||
-        !plan.can_apply ||
-        !canManage ||
-        active ||
-        operation?.plan_id === plan.id ||
-        (!uncertain && Date.now() / 1000 >= plan.expires_at)
+          !plan.can_apply ||
+          !canManage ||
+          active ||
+          operation?.plan_id === plan.id ||
+          (!uncertain && Date.now() / 1000 >= plan.expires_at)
       "
       @click="apply"
-      >{{ uncertain ? "确认操作进度" : "确认应用" }}</n-button
     >
+      {{ uncertain ? "确认操作进度" : "确认应用" }}
+    </n-button>
   </section>
-  <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice"
-    >执行结果尚未取得。请保留本页，通过原请求查询或重送；未确认的变更会自动恢复。</n-alert
-  >
+  <n-alert v-if="uncertain" type="warning" :bordered="false" class="notice">
+    执行结果尚未取得。请保留本页，通过原请求查询或重送；未确认的变更会自动恢复。
+  </n-alert>
   <section v-if="operation" class="surface">
     <div class="page-toolbar">
       <h3>运行操作</h3>
-      <n-tag :type="operation.state === 'succeeded' ? 'success' : 'warning'">{{
-        states[operation.state] ?? operation.state
-      }}</n-tag>
+      <n-tag :type="operation.state === 'succeeded' ? 'success' : 'warning'">
+        {{
+          states[operation.state] ?? operation.state
+        }}
+      </n-tag>
     </div>
     <p>
       {{ operation.action === "remove" ? "移除" : "应用" }} · 操作
@@ -582,8 +602,9 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
       type="warning"
       :bordered="false"
       class="notice"
-      >{{ operation.error }}</n-alert
     >
+      {{ operation.error }}
+    </n-alert>
     <template v-if="operation.state === 'waiting_confirmation'">
       <p>
         剩余
@@ -594,23 +615,26 @@ useLiveRefresh(api, ["firewall"], readRuntime, () => reading.value);
         type="primary"
         :disabled="busy || !canManage || remaining <= 0"
         @click="decide('confirm')"
-        >确认当前管理连接</n-button
       >
+        确认当前管理连接
+      </n-button>
     </template>
     <n-button
       v-if="active"
       :disabled="busy || !canManage"
       class="rollback"
       @click="decide('rollback')"
-      >恢复最后确认策略</n-button
     >
+      恢复最后确认策略
+    </n-button>
     <n-alert
       v-if="operation.action === 'remove' && operation.state === 'succeeded'"
       type="info"
       :bordered="false"
       class="notice"
-      >本应用规则已确认移除。已保存的规则保留，重新应用需生成新计划。</n-alert
     >
+      本应用规则已确认移除。已保存的规则保留，重新应用需生成新计划。
+    </n-alert>
     <p v-if="operation.state === 'succeeded'" class="muted">
       确认来源：{{ operation.confirmed_source }} · 确认范围：目标管理监听
     </p>

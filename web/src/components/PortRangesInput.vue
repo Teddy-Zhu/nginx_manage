@@ -13,9 +13,13 @@ function update(index: number, changes: Partial<PortRange>) {
       <NSelect :value="row.to === null ? 'single' : 'range'" :options="[{ label: '单个端口', value: 'single' }, { label: '端口范围', value: 'range' }]" :disabled="disabled" @update:value="update(index, { to: $event === 'single' ? null : row.from ?? 1 })" />
       <NInputNumber class="range-start" :value="row.from" :min="1" :max="65535" :precision="0" :aria-label="`起始端口 ${index + 1}`" placeholder="端口" :disabled="disabled" @update:value="update(index, { from: $event })" />
       <NInputNumber v-if="row.to !== null" :value="row.to" :min="row.from ?? 1" :max="65535" :precision="0" :clearable="false" :aria-label="`结束端口 ${index + 1}`" placeholder="结束端口" :disabled="disabled" @update:value="update(index, { to: $event })" />
-      <NButton attr-type="button" :disabled="disabled" @click="emit('update:value', value.filter((_, i) => i !== index))">移除</NButton>
+      <NButton attr-type="button" :disabled="disabled" @click="emit('update:value', value.filter((_, i) => i !== index))">
+        移除
+      </NButton>
     </div>
-    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || value.length >= 16" @click="emit('update:value', [...value, { from: null, to: null }])">＋ 添加端口</NButton>
+    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || value.length >= 16" @click="emit('update:value', [...value, { from: null, to: null }])">
+      ＋ 添加端口
+    </NButton>
   </div>
 </template>
 <style scoped>

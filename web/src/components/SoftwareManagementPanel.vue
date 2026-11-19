@@ -73,7 +73,9 @@ defineEmits<{ operate: [action: SoftwareOperation]; settings: [] }>();
         </p>
       </div>
       <RouterLink :to="app.entry.to">
-        <NButton type="primary"> 打开功能页面 </NButton>
+        <NButton type="primary">
+          打开功能页面
+        </NButton>
       </RouterLink>
     </section>
     <div v-if="task" class="management-task">

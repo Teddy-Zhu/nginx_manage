@@ -59,13 +59,17 @@ useLiveRefresh(
   <slot v-if="!software || !canInspect" />
   <section v-else-if="loading" class="surface software-required">
     <NSpin size="small" />
-    <p class="muted">正在读取软件状态…</p>
+    <p class="muted">
+      正在读取软件状态…
+    </p>
   </section>
   <section v-else-if="error" class="surface">
-    <NAlert type="error" title="暂时无法读取软件状态"
-      >请稍后重试，或检查服务器上的面板服务是否正常运行。</NAlert
-    >
-    <NButton style="margin-top: 16px" @click="reload">重新读取</NButton>
+    <NAlert type="error" title="暂时无法读取软件状态">
+      请稍后重试，或检查服务器上的面板服务是否正常运行。
+    </NAlert>
+    <NButton style="margin-top: 16px" @click="reload">
+      重新读取
+    </NButton>
   </section>
   <SoftwareRequired
     v-else-if="

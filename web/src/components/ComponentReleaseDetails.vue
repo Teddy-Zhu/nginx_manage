@@ -7,7 +7,9 @@ defineProps<{
 <template>
   <section class="release-details">
     <h4>更新说明</h4>
-    <p class="release-notes">{{ details.notes || "此版本暂无更新说明。" }}</p>
+    <p class="release-notes">
+      {{ details.notes || "此版本暂无更新说明。" }}
+    </p>
   </section>
 </template>
 <style scoped>

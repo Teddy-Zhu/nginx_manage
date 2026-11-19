@@ -200,8 +200,9 @@ async function chooseVersion(version: ComponentVersion) {
       :loading="busy || active"
       :disabled="!installAllowed || active"
       @click="choosingVersion = true"
-      >安装 Nginx</NButton
     >
+      安装 Nginx
+    </NButton>
   </div>
   <div v-else class="page-stack">
     <NAlert v-if="overview && !overview.available" type="warning">
@@ -222,8 +223,8 @@ async function chooseVersion(version: ComponentVersion) {
         :disabled="!permitted || !overview?.available || active"
         @click="choosingVersion = true"
       >
-        选择版本 </NButton
-      ><TaskLogButton v-if="checked" :task-id="checked.id" />
+        选择版本
+      </NButton><TaskLogButton v-if="checked" :task-id="checked.id" />
     </div>
     <template v-if="release">
       <p>
@@ -245,11 +246,11 @@ async function chooseVersion(version: ComponentVersion) {
         :loading="busy"
         :disabled="
           !permitted ||
-          busy ||
-          active ||
-          engineMismatch ||
-          !checked?.result?.runtime_ready ||
-          release.expires_at * 1000 <= Date.now()
+            busy ||
+            active ||
+            engineMismatch ||
+            !checked?.result?.runtime_ready ||
+            release.expires_at * 1000 <= Date.now()
         "
         @click="prepare"
       >
@@ -262,8 +263,7 @@ async function chooseVersion(version: ComponentVersion) {
       class="record-card page-stack"
     >
       <div class="section-heading">
-        <strong>{{ item.result?.release?.version }} 已准备</strong
-        ><TaskLogButton :task-id="item.id" />
+        <strong>{{ item.result?.release?.version }} 已准备</strong><TaskLogButton :task-id="item.id" />
       </div>
       <div class="button-row">
         <RouterLink

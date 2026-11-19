@@ -47,7 +47,9 @@ function setMapping(value: MappingRow[]) {
       <NFormItem label="网卡映射" :validation-status="mappingError ? 'error' : undefined" :feedback="mappingError || '目标网卡留空时解除网卡绑定。'">
         <MappingInput :max="256" :value="rows" source-label="来源网卡" target-label="目标网卡（可留空）" :disabled="disabled" @update:value="setMapping" />
       </NFormItem>
-      <NAlert type="warning">请为规则绑定的每张网卡设置映射。迁移后需在目标防火墙页面确认应用。</NAlert>
+      <NAlert type="warning">
+        请为规则绑定的每张网卡设置映射。迁移后需在目标防火墙页面确认应用。
+      </NAlert>
     </template>
   </div>
 </template>

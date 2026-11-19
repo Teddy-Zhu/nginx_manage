@@ -42,7 +42,9 @@ async function submit() {
     </div>
     <div class="login-panel">
       <div class="login-card">
-        <div class="eyebrow">NGINXPANEL</div>
+        <div class="eyebrow">
+          NGINXPANEL
+        </div>
         <h1>{{ bootstrap ? "初始化管理员" : "欢迎回来" }}</h1>
         <p class="muted">
           {{
@@ -56,32 +58,36 @@ async function submit() {
           type="warning"
           :bordered="false"
           style="margin: 20px 0"
-          >暂时无法连接管理服务，请稍后重试。</n-alert
         >
+          暂时无法连接管理服务，请稍后重试。
+        </n-alert>
         <n-form style="margin-top: 28px" @submit.prevent="submit">
-          <n-form-item v-if="bootstrap" label="一次性引导令牌"
-            ><n-input
+          <n-form-item v-if="bootstrap" label="一次性引导令牌">
+            <n-input
               v-model:value="token"
               type="password"
               autocomplete="off"
               :maxlength="100"
-          /></n-form-item>
-          <n-form-item label="用户名"
-            ><n-input
+            />
+          </n-form-item>
+          <n-form-item label="用户名">
+            <n-input
               v-model:value="username"
               autofocus
               autocomplete="username"
               :maxlength="64"
               placeholder="输入管理员用户名"
-          /></n-form-item>
-          <n-form-item :label="bootstrap ? '设置密码（至少 6 个字符）' : '密码'"
-            ><n-input
+            />
+          </n-form-item>
+          <n-form-item :label="bootstrap ? '设置密码（至少 6 个字符）' : '密码'">
+            <n-input
               v-model:value="password"
               type="password"
               show-password-on="click"
               :autocomplete="bootstrap ? 'new-password' : 'current-password'"
               placeholder="输入密码"
-          /></n-form-item>
+            />
+          </n-form-item>
           <n-button
             type="primary"
             size="large"
@@ -90,14 +96,17 @@ async function submit() {
             :loading="busy"
             :disabled="
               !username ||
-              !password ||
-              (bootstrap && (!token || [...password].length < 6))
+                !password ||
+                (bootstrap && (!token || [...password].length < 6))
             "
-            >{{ bootstrap ? "创建管理员并登录" : "登录" }}
-            <span style="margin-left: auto">→</span></n-button
           >
+            {{ bootstrap ? "创建管理员并登录" : "登录" }}
+            <span style="margin-left: auto">→</span>
+          </n-button>
         </n-form>
-        <p class="login-note">仅一个管理员账户 · 凭据由当前节点保管</p>
+        <p class="login-note">
+          仅一个管理员账户 · 凭据由当前节点保管
+        </p>
       </div>
     </div>
   </div>

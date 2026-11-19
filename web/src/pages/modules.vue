@@ -76,12 +76,16 @@ onMounted(load);
   <section class="surface">
     <div class="section-heading">
       <h2>功能模块</h2>
-      <NButton text :loading="busy" @click="load">刷新</NButton>
+      <NButton text :loading="busy" @click="load">
+        刷新
+      </NButton>
     </div>
     <div v-for="module in modules" :key="module.id" class="module-row">
       <div>
         <strong>{{ module.name }}</strong>
-        <p v-if="module.reason" class="muted">{{ module.reason }}</p>
+        <p v-if="module.reason" class="muted">
+          {{ module.reason }}
+        </p>
       </div>
       <NSwitch
         :value="module.enabled"

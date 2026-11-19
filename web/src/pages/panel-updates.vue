@@ -183,7 +183,9 @@ onMounted(() => load(true));
       <div class="section-heading">
         <div>
           <h3>当前版本</h3>
-          <p class="current-version">{{ version || "正在读取" }}</p>
+          <p class="current-version">
+            {{ version || "正在读取" }}
+          </p>
         </div>
       </div>
       <div class="button-row">
@@ -194,8 +196,9 @@ onMounted(() => load(true));
             !canCheck || busy || active || savingChannel || !channelReady
           "
           @click="check"
-          >{{ checking ? "正在检查" : "检查更新" }}</NButton
         >
+          {{ checking ? "正在检查" : "检查更新" }}
+        </NButton>
         <NSelect
           :value="channel"
           :options="updateChannels"
@@ -229,17 +232,21 @@ onMounted(() => load(true));
       <div v-else-if="checked?.state === 'available'" class="update-result">
         <h3>
           发现新版本 {{ checked.version }}
-          <NTag v-if="checked.channel === 'beta'" type="warning" size="small"
-            >Beta</NTag
-          >
+          <NTag v-if="checked.channel === 'beta'" type="warning" size="small">
+            Beta
+          </NTag>
         </h3>
-        <p v-if="checked.notes" class="release-notes">{{ checked.notes }}</p>
+        <p v-if="checked.notes" class="release-notes">
+          {{ checked.notes }}
+        </p>
         <p class="muted">
           {{ (checked.archive_bytes / 1048576).toFixed(1) }} MB
         </p>
-        <NAlert v-if="checked.message" type="warning">{{
-          checked.message
-        }}</NAlert>
+        <NAlert v-if="checked.message" type="warning">
+          {{
+            checked.message
+          }}
+        </NAlert>
         <NButton
           v-if="checked.confirmation"
           type="primary"
@@ -259,7 +266,9 @@ onMounted(() => load(true));
           <p class="muted">
             {{ new Date(task.created_at * 1000).toLocaleString() }}
           </p>
-          <p v-if="task.error">{{ task.error }}</p>
+          <p v-if="task.error">
+            {{ task.error }}
+          </p>
         </div>
         <TaskLogButton :task-id="task.id" />
       </article>

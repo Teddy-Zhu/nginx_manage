@@ -218,40 +218,44 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
 </script>
 <template>
   <div class="toolbar">
-    <span class="muted">每页最多 30 条记录</span
-    ><n-button :loading="busy" @click="load">刷新</n-button>
+    <span class="muted">每页最多 30 条记录</span><n-button :loading="busy" @click="load">
+      刷新
+    </n-button>
   </div>
-  <NAlert v-if="tab === 'tasks' && tasksError" type="error">{{
-    tasksError
-  }}</NAlert>
+  <NAlert v-if="tab === 'tasks' && tasksError" type="error">
+    {{
+      tasksError
+    }}
+  </NAlert>
   <section class="surface">
-    <n-tabs type="line" :value="tab" @update:value="changeTab"
-      ><n-tab-pane name="tasks" tab="执行任务"
-        ><n-data-table
+    <n-tabs type="line" :value="tab" @update:value="changeTab">
+      <n-tab-pane name="tasks" tab="执行任务">
+        <n-data-table
           :columns="taskColumns"
           :data="tasks"
           :loading="busy"
           :bordered="false"
-          :scroll-x="900" /></n-tab-pane
-      ><n-tab-pane name="audit" tab="操作历史">
+          :scroll-x="900"
+        />
+      </n-tab-pane><n-tab-pane name="audit" tab="操作历史">
         <div class="page-stack">
           <div class="grid-2">
-            <NFormItem label="开始时间"
-              ><input v-model="filter.from" type="datetime-local"
-            /></NFormItem>
-            <NFormItem label="结束时间"
-              ><input v-model="filter.until" type="datetime-local"
-            /></NFormItem>
-            <NFormItem label="操作者"
-              ><NInput
+            <NFormItem label="开始时间">
+              <input v-model="filter.from" type="datetime-local" />
+            </NFormItem>
+            <NFormItem label="结束时间">
+              <input v-model="filter.until" type="datetime-local" />
+            </NFormItem>
+            <NFormItem label="操作者">
+              <NInput
                 v-model:value="filter.principal"
                 placeholder="精确匹配，留空为全部"
                 :maxlength="128"
-            /></NFormItem>
-            <NFormItem label="操作"
-              ><NSelect
+              />
+            </NFormItem>
+            <NFormItem label="操作">
+              <NSelect
                 :value="filter.action || null"
-                @update:value="filter.action = String($event ?? '')"
                 :options="
                   Object.entries(auditActions).map(([value, label]) => ({
                     value,
@@ -262,11 +266,12 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
                 clearable
                 tag
                 placeholder="选择操作"
-            /></NFormItem>
-            <NFormItem label="执行结果"
-              ><NSelect
+                @update:value="filter.action = String($event ?? '')"
+              />
+            </NFormItem>
+            <NFormItem label="执行结果">
+              <NSelect
                 :value="filter.outcome || null"
-                @update:value="filter.outcome = String($event ?? '')"
                 :options="
                   Object.entries(auditOutcomes).map(([value, label]) => ({
                     value,
@@ -277,43 +282,49 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => busy.value || tab.value !== "tas
                 clearable
                 tag
                 placeholder="选择结果"
-            /></NFormItem>
+                @update:value="filter.outcome = String($event ?? '')"
+              />
+            </NFormItem>
           </div>
           <div class="toolbar">
-            <NButton type="primary" :disabled="busy" @click="searchAudit"
-              >查询</NButton
-            >
-            <NButton :disabled="busy" @click="exportAudit"
-              >导出审计记录</NButton
-            >
+            <NButton type="primary" :disabled="busy" @click="searchAudit">
+              查询
+            </NButton>
+            <NButton :disabled="busy" @click="exportAudit">
+              导出审计记录
+            </NButton>
           </div>
           <p class="muted">
             导出当前查询范围内的操作记录；记录较多时，请缩小时间范围。
           </p>
-          <NAlert v-if="audits?.notice" type="info">{{ audits.notice }}</NAlert>
+          <NAlert v-if="audits?.notice" type="info">
+            {{ audits.notice }}
+          </NAlert>
           <n-data-table
             :columns="auditColumns"
             :data="audits?.rows ?? []"
             :bordered="false"
             :scroll-x="1000"
-          /></div></n-tab-pane
-    ></n-tabs>
+          />
+        </div>
+      </n-tab-pane>
+    </n-tabs>
     <div class="pagination">
       <NButton
         :disabled="busy || (tab === 'tasks' ? !offset : !auditPage)"
         @click="page(-1)"
-        >上一页</NButton
       >
-      <span class="muted"
-        >第 {{ tab === "tasks" ? offset / 30 + 1 : auditPage + 1 }} 页</span
-      >
+        上一页
+      </NButton>
+      <span class="muted">第 {{ tab === "tasks" ? offset / 30 + 1 : auditPage + 1 }} 页</span>
       <NButton
         :disabled="
           busy || (tab === 'tasks' ? tasks.length < 30 : !audits?.more)
         "
         @click="page(1)"
-        >下一页</NButton
       >
+        下一页
+      </NButton>
     </div>
   </section>
 </template>

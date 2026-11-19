@@ -354,8 +354,9 @@ onUnmounted(reset);
 <template>
   <div class="toolbar">
     <div class="inline-gap">
-      <n-button :loading="busy" @click="run(load)">刷新来源</n-button
-      ><n-select
+      <n-button :loading="busy" @click="run(load)">
+        刷新来源
+      </n-button><n-select
         v-model:value="policyScope"
         style="width: 180px"
         :options="
@@ -364,16 +365,18 @@ onUnmounted(reset);
             value: item.scope,
           }))
         "
-      /><n-button :disabled="!policy" @click="editPolicy">轮转与保留</n-button>
+      /><n-button :disabled="!policy" @click="editPolicy">
+        轮转与保留
+      </n-button>
     </div>
-    <span class="muted"
-      >{{ sources.length }} 个来源 ·
-      {{ Math.round((policy?.bytes ?? 0) / 1048576) }} MiB</span
-    >
+    <span class="muted">{{ sources.length }} 个来源 ·
+      {{ Math.round((policy?.bytes ?? 0) / 1048576) }} MiB</span>
   </div>
-  <n-alert v-if="policy?.warning" type="warning" :bordered="false">{{
-    policy.warning
-  }}</n-alert>
+  <n-alert v-if="policy?.warning" type="warning" :bordered="false">
+    {{
+      policy.warning
+    }}
+  </n-alert>
   <n-empty
     v-if="!sources.length"
     description="暂无可用日志，请检查服务器管理服务"
@@ -384,8 +387,8 @@ onUnmounted(reset);
       label-placement="top"
       @submit.prevent="search()"
     >
-      <n-form-item label="分类"
-        ><n-select
+      <n-form-item label="分类">
+        <n-select
           v-model:value="category"
           :options="[
             { label: '全部', value: 'all' },
@@ -396,98 +399,110 @@ onUnmounted(reset);
             { label: '安全', value: 'security' },
             { label: '任务', value: 'task' },
           ]"
-      /></n-form-item>
-      <n-form-item label="日志来源"
-        ><n-select v-model:value="selected" :options="sourceOptions" filterable
-      /></n-form-item>
-      <n-form-item label="查询模式"
-        ><n-select
+        />
+      </n-form-item>
+      <n-form-item label="日志来源">
+        <n-select v-model:value="selected" :options="sourceOptions" filterable />
+      </n-form-item>
+      <n-form-item label="查询模式">
+        <n-select
           v-model:value="filter.mode"
           :options="[
             { label: '最近', value: 'recent' },
             { label: '历史', value: 'history' },
           ]"
-      /></n-form-item>
-      <n-form-item label="开始时间"
-        ><input v-model="filter.from" type="datetime-local" required
-      /></n-form-item>
-      <n-form-item label="结束时间"
-        ><input v-model="filter.until" type="datetime-local"
-      /></n-form-item>
-      <n-form-item v-if="structured" :label="stream ? '会话状态' : 'HTTP 状态'"
-        ><n-input-number
+        />
+      </n-form-item>
+      <n-form-item label="开始时间">
+        <input v-model="filter.from" type="datetime-local" required />
+      </n-form-item>
+      <n-form-item label="结束时间">
+        <input v-model="filter.until" type="datetime-local" />
+      </n-form-item>
+      <n-form-item v-if="structured" :label="stream ? '会话状态' : 'HTTP 状态'">
+        <n-input-number
           v-model:value="filter.status"
           :min="100"
           :max="599"
           :precision="0"
           clearable
-      /></n-form-item>
-      <n-form-item v-if="structured" label="来源 IP"
-        ><n-input v-model:value="filter.ip" placeholder="数值 IP"
-      /></n-form-item>
-      <n-form-item v-if="http" label="路径前缀"
-        ><n-input
+        />
+      </n-form-item>
+      <n-form-item v-if="structured" label="来源 IP">
+        <n-input v-model:value="filter.ip" placeholder="数值 IP" />
+      </n-form-item>
+      <n-form-item v-if="http" label="路径前缀">
+        <n-input
           v-model:value="filter.path"
           placeholder="/api/"
           :maxlength="256"
-      /></n-form-item>
-      <n-form-item label="关键字"
-        ><n-input v-model:value="filter.keyword" :maxlength="256"
-      /></n-form-item>
+        />
+      </n-form-item>
+      <n-form-item label="关键字">
+        <n-input v-model:value="filter.keyword" :maxlength="256" />
+      </n-form-item>
 
-      <n-form-item v-if="http" label="防护原因 / 事件"
-        ><n-input v-model:value="filter.reason" :maxlength="256"
-      /></n-form-item>
-      <n-form-item v-if="http" label="事件范围"
-        ><n-checkbox v-model:checked="filter.events"
-          >仅防护事件</n-checkbox
-        ></n-form-item
-      >
+      <n-form-item v-if="http" label="防护原因 / 事件">
+        <n-input v-model:value="filter.reason" :maxlength="256" />
+      </n-form-item>
+      <n-form-item v-if="http" label="事件范围">
+        <n-checkbox v-model:checked="filter.events">
+          仅防护事件
+        </n-checkbox>
+      </n-form-item>
     </n-form>
-    <n-alert v-if="source?.sensitive" type="warning" :bordered="false"
-      >日志可能包含访问地址等敏感信息，请妥善保管导出的文件。</n-alert
-    >
-    <n-alert v-if="source?.reason" type="warning" :bordered="false">{{
-      source.reason
-    }}</n-alert>
+    <n-alert v-if="source?.sensitive" type="warning" :bordered="false">
+      日志可能包含访问地址等敏感信息，请妥善保管导出的文件。
+    </n-alert>
+    <n-alert v-if="source?.reason" type="warning" :bordered="false">
+      {{
+        source.reason
+      }}
+    </n-alert>
     <div class="toolbar">
       <n-button
         type="primary"
         :loading="busy"
         :disabled="!selected"
         @click="search()"
-        >查询</n-button
-      ><n-button
+      >
+        查询
+      </n-button><n-button
         :disabled="!result?.more || following || busy"
         @click="search(true)"
-        >下一页</n-button
-      ><n-button
+      >
+        下一页
+      </n-button><n-button
         v-if="!following"
         :disabled="
           !queried || filter.mode !== 'recent' || !!filter.until || busy
         "
         @click="follow"
-        >实时跟随</n-button
-      ><n-button v-else @click="stop">停止跟随</n-button
-      ><n-button :disabled="busy || !selected" @click="download"
-        >下载日志</n-button
       >
+        实时跟随
+      </n-button><n-button v-else @click="stop">
+        停止跟随
+      </n-button><n-button :disabled="busy || !selected" @click="download">
+        下载日志
+      </n-button>
     </div>
-    <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
+    <n-alert v-if="error" type="error" :bordered="false">
+      {{ error }}
+    </n-alert>
     <n-alert
       v-if="result?.gap || result?.notice"
       :type="result?.gap ? 'warning' : 'info'"
       :bordered="false"
-      >{{
-        result?.notice || "日志范围存在缺口，请缩小时间范围后查询历史。"
-      }}</n-alert
     >
+      {{
+        result?.notice || "日志范围存在缺口，请缩小时间范围后查询历史。"
+      }}
+    </n-alert>
     <p v-if="queried" class="muted">
       当前 {{ rows.length }} 行 · 本页扫描
       {{ Math.ceil((result?.scanned_bytes ?? 0) / 1024) }} KiB · 跳过
       {{ result?.skipped ?? 0 }} 行<span v-if="following">
-        · 正在跟随，最多保留最近 200 行</span
-      >
+        · 正在跟随，最多保留最近 200 行</span>
     </p>
     <n-data-table
       :columns="columns"
@@ -506,33 +521,39 @@ onUnmounted(reset);
     @cancel="policyOpen = false"
   >
     <template v-if="policy && policyInput">
-      <n-alert type="info" :bordered="false"
-        >按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。</n-alert
-      >
-      <n-alert v-if="!policy.editable" type="warning" :bordered="false">{{
-        policy.scope === "system"
-          ? "系统日志暂不可用，请检查服务器管理服务。"
-          : "日志当前由其他工具管理，暂不支持在面板中修改轮转设置。"
-      }}</n-alert>
+      <n-alert type="info" :bordered="false">
+        按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。
+      </n-alert>
+      <n-alert v-if="!policy.editable" type="warning" :bordered="false">
+        {{
+          policy.scope === "system"
+            ? "系统日志暂不可用，请检查服务器管理服务。"
+            : "日志当前由其他工具管理，暂不支持在面板中修改轮转设置。"
+        }}
+      </n-alert>
 
       <n-form-item
         v-for="field in policyFields"
         :key="field.key"
         :label="field.label"
-        ><n-input-number
+      >
+        <n-input-number
           :value="policyInput.policy[field.key]"
           :disabled="!policy.editable"
           :min="field.min"
           :max="field.max"
           :precision="0"
           @update:value="policyNumber(field.key, $event)"
-      /></n-form-item>
-      <n-form-item label="压缩已关闭历史文件"
-        ><n-switch
+        />
+      </n-form-item>
+      <n-form-item label="压缩已关闭历史文件">
+        <n-switch
           v-model:value="policyInput.policy.compress"
           :disabled="!policy.editable"
-      /></n-form-item> </template
-  ></FormDialog>
+        />
+      </n-form-item>
+    </template>
+  </FormDialog>
 </template>
 
 <style scoped>

@@ -31,7 +31,9 @@ const columns: DataTableColumns<Family> = [
 </script>
 
 <template>
-  <n-alert type="info" :bordered="false">{{ plan.reason }}</n-alert>
+  <n-alert type="info" :bordered="false">
+    {{ plan.reason }}
+  </n-alert>
   <n-alert
     v-for="warning in plan.warnings"
     :key="warning"
@@ -46,19 +48,31 @@ const columns: DataTableColumns<Family> = [
     <dt>入口保护规则</dt>
     <dd>{{ plan.protection_rules }} 条</dd>
     <dt>完整规则基线</dt>
-    <dd class="digest">{{ plan.configuration_hash }}</dd>
+    <dd class="digest">
+      {{ plan.configuration_hash }}
+    </dd>
     <dt>诊断工具摘要</dt>
-    <dd class="digest">{{ plan.tool_hash }}</dd>
+    <dd class="digest">
+      {{ plan.tool_hash }}
+    </dd>
     <dt>固定 command/save/restore 工具摘要</dt>
-    <dd class="digest">{{ plan.toolchain_hash }}</dd>
+    <dd class="digest">
+      {{ plan.toolchain_hash }}
+    </dd>
     <dt>官方预演</dt>
     <dd>{{ plan.dry_run_commands }} 次（候选及正反向批次）</dd>
     <dt>完整预演摘要</dt>
-    <dd class="digest">{{ plan.dry_run_hash }}</dd>
+    <dd class="digest">
+      {{ plan.dry_run_hash }}
+    </dd>
     <dt>逻辑规则摘要</dt>
-    <dd class="digest">{{ plan.logical_hash }}</dd>
+    <dd class="digest">
+      {{ plan.logical_hash }}
+    </dd>
     <dt>完整代际程序摘要</dt>
-    <dd class="digest">{{ programHash }}</dd>
+    <dd class="digest">
+      {{ programHash }}
+    </dd>
   </dl>
   <n-data-table
     :columns="columns"

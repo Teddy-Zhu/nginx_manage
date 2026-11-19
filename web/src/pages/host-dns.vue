@@ -598,16 +598,24 @@ function cancelEdit() {
 </script>
 <template>
   <Teleport defer to="#page-heading-actions">
-    <n-button :loading="reading" :disabled="busy" @click="read">刷新</n-button>
+    <n-button :loading="reading" :disabled="busy" @click="read">
+      刷新
+    </n-button>
   </Teleport>
   <div class="dns-page page-stack">
-    <n-alert v-if="error" type="error" :bordered="false">{{ error }}</n-alert>
-    <n-alert v-if="migrationError" type="error" :bordered="false">{{
-      migrationError
-    }}</n-alert>
-    <n-alert v-if="migrationNotice" type="info" :bordered="false">{{
-      migrationNotice
-    }}</n-alert>
+    <n-alert v-if="error" type="error" :bordered="false">
+      {{ error }}
+    </n-alert>
+    <n-alert v-if="migrationError" type="error" :bordered="false">
+      {{
+        migrationError
+      }}
+    </n-alert>
+    <n-alert v-if="migrationNotice" type="info" :bordered="false">
+      {{
+        migrationNotice
+      }}
+    </n-alert>
     <ol class="dns-steps" aria-label="DNS 设置流程">
       <li
         v-for="(item, index) in steps"
@@ -615,8 +623,7 @@ function cancelEdit() {
         :class="{ current: step === index, completed: step > index }"
         :aria-current="step === index ? 'step' : undefined"
       >
-        <span>{{ index + 1 }}</span
-        >{{ item }}
+        <span>{{ index + 1 }}</span>{{ item }}
       </li>
     </ol>
 
@@ -624,18 +631,23 @@ function cancelEdit() {
       <div class="section-toolbar">
         <div>
           <h2>当前变更</h2>
-          <p class="muted">{{ label(pending?.stage ?? task?.stage) }}</p>
+          <p class="muted">
+            {{ label(pending?.stage ?? task?.stage) }}
+          </p>
         </div>
-        <n-tag :type="statusType" :bordered="false">{{
-          label(pending?.state ?? task?.state)
-        }}</n-tag>
+        <n-tag :type="statusType" :bordered="false">
+          {{
+            label(pending?.state ?? task?.state)
+          }}
+        </n-tag>
       </div>
       <n-alert
         v-if="pending?.error || task?.error"
         type="error"
         :bordered="false"
-        >{{ pending?.error || task?.error }}</n-alert
       >
+        {{ pending?.error || task?.error }}
+      </n-alert>
       <p v-if="task?.decision">
         {{
           task.decision === "confirm"
@@ -656,8 +668,9 @@ function cancelEdit() {
           :loading="busy"
           :disabled="remaining === 0"
           @click="decide('confirm')"
-          >确认保留</n-button
         >
+          确认保留
+        </n-button>
       </div>
       <p v-else-if="!pending?.error && !task?.error" class="muted">
         正在处理 DNS 设置，请等待检查结果。
@@ -667,14 +680,16 @@ function cancelEdit() {
           v-if="activeTask"
           :disabled="!canWrite || busy || !!task?.decision"
           @click="decide('rollback')"
-          >{{ task?.state === "queued" ? "取消变更" : "恢复原设置" }}</n-button
         >
+          {{ task?.state === "queued" ? "取消变更" : "恢复原设置" }}
+        </n-button>
         <n-button
           v-if="task"
           quaternary
           @click="inspectTask(task.id, 'DNS 设置日志')"
-          >查看日志</n-button
         >
+          查看日志
+        </n-button>
       </div>
     </section>
 
@@ -691,28 +706,28 @@ function cancelEdit() {
           </p>
         </div>
         <div class="dns-actions">
-          <span class="switch-label"
-            >DNS 管理<n-switch
-              :value="module?.enabled ?? false"
-              :disabled="
-                !canToggle || busy || editing || activeTask || !!pending
-              "
-              @update:value="toggle"
+          <span class="switch-label">DNS 管理<n-switch
+            :value="module?.enabled ?? false"
+            :disabled="
+              !canToggle || busy || editing || activeTask || !!pending
+            "
+            @update:value="toggle"
           /></span>
           <n-button
             v-if="!editing"
             type="primary"
             :disabled="
               !canWrite ||
-              !module?.enabled ||
-              !writable ||
-              activeTask ||
-              !!pending ||
-              busy
+                !module?.enabled ||
+                !writable ||
+                activeTask ||
+                !!pending ||
+                busy
             "
             @click="edit"
-            >修改 DNS</n-button
           >
+            修改 DNS
+          </n-button>
         </div>
       </div>
       <n-form-item
@@ -728,20 +743,20 @@ function cancelEdit() {
         />
       </n-form-item>
       <dl class="dns-details">
-        <template v-for="row in currentRows" :key="row.label"
-          ><dt>{{ row.label }}</dt>
-          <dd>{{ row.value }}</dd></template
-        >
+        <template v-for="row in currentRows" :key="row.label">
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
+        </template>
       </dl>
-      <n-alert v-if="!writable" type="info" :bordered="false"
-        >当前网络配置仅支持查看，无法在此修改 DNS 设置。</n-alert
-      >
-      <n-alert v-else-if="!module?.enabled" type="info" :bordered="false"
-        >启用 DNS 管理后可修改设置。</n-alert
-      >
-      <n-alert v-if="drift" type="warning" :bordered="false"
-        >DNS 设置已在其他位置修改，重新检查后再应用。</n-alert
-      >
+      <n-alert v-if="!writable" type="info" :bordered="false">
+        当前网络配置仅支持查看，无法在此修改 DNS 设置。
+      </n-alert>
+      <n-alert v-else-if="!module?.enabled" type="info" :bordered="false">
+        启用 DNS 管理后可修改设置。
+      </n-alert>
+      <n-alert v-if="drift" type="warning" :bordered="false">
+        DNS 设置已在其他位置修改，重新检查后再应用。
+      </n-alert>
     </section>
 
     <FormDialog
@@ -752,11 +767,11 @@ function cancelEdit() {
       :dirty="editSnapshot !== editBaseline"
       :submit-disabled="
         !canWrite ||
-        !takeover ||
-        !writable ||
-        !module?.enabled ||
-        activeTask ||
-        !!pending
+          !takeover ||
+          !writable ||
+          !module?.enabled ||
+          activeTask ||
+          !!pending
       "
       :submit-text="plan && !planExpired ? '应用设置' : '检查设置'"
       @submit="plan && !planExpired ? apply() : preview()"
@@ -789,11 +804,10 @@ function cancelEdit() {
           <div v-if="family.enabled" class="dns-family">
             <div class="section-toolbar">
               <h3>{{ family.label }}</h3>
-              <span class="switch-label"
-                >自动获取 DNS<n-switch
-                  v-model:value="family.automatic"
-                  :disabled="busy || !['auto', 'dhcp'].includes(family.method)"
-                  @update:value="invalidate"
+              <span class="switch-label">自动获取 DNS<n-switch
+                v-model:value="family.automatic"
+                :disabled="busy || !['auto', 'dhcp'].includes(family.method)"
+                @update:value="invalidate"
               /></span>
             </div>
             <n-form-item
@@ -837,7 +851,9 @@ function cancelEdit() {
           @update:value="invalidate"
         />
       </n-form-item>
-      <p class="muted">域名后缀用于补全内网短名称，不需要时可留空。</p>
+      <p class="muted">
+        域名后缀用于补全内网短名称，不需要时可留空。
+      </p>
       <div class="dns-verification">
         <h3>连接检查</h3>
         <n-form-item label="测试域名" required>
@@ -859,8 +875,9 @@ function cancelEdit() {
         v-model:checked="takeover"
         :disabled="busy"
         @update:checked="invalidate"
-        >确认用以上设置替换当前 DNS 配置</n-checkbox
       >
+        确认用以上设置替换当前 DNS 配置
+      </n-checkbox>
 
       <div v-if="plan" class="dns-review">
         <div class="section-toolbar">
@@ -868,17 +885,18 @@ function cancelEdit() {
           <n-tag
             :type="planExpired ? 'warning' : 'success'"
             :bordered="false"
-            >{{ planExpired ? "请重新检查" : "检查通过" }}</n-tag
           >
+            {{ planExpired ? "请重新检查" : "检查通过" }}
+          </n-tag>
         </div>
         <div class="dns-comparison">
           <div>
             <h4>当前设置</h4>
             <dl class="dns-details">
-              <template v-for="row in configRows(plan.before)" :key="row.label"
-                ><dt>{{ row.label }}</dt>
-                <dd>{{ row.value }}</dd></template
-              >
+              <template v-for="row in configRows(plan.before)" :key="row.label">
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd>
+              </template>
             </dl>
           </div>
           <div>
@@ -887,9 +905,10 @@ function cancelEdit() {
               <template
                 v-for="row in configRows(plan.input.config)"
                 :key="row.label"
-                ><dt>{{ row.label }}</dt>
-                <dd>{{ row.value }}</dd></template
               >
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd>
+              </template>
             </dl>
           </div>
         </div>
@@ -904,17 +923,21 @@ function cancelEdit() {
     <section v-if="task && !activeTask && !pending" class="surface">
       <div class="section-toolbar">
         <h2>最近操作</h2>
-        <n-tag :type="statusType" :bordered="false">{{
-          label(task.state)
-        }}</n-tag>
+        <n-tag :type="statusType" :bordered="false">
+          {{
+            label(task.state)
+          }}
+        </n-tag>
       </div>
       <p>{{ label(task.stage) }}</p>
-      <n-alert v-if="task.error" type="warning" :bordered="false">{{
-        task.error
-      }}</n-alert>
-      <n-button quaternary @click="inspectTask(task.id, 'DNS 设置日志')"
-        >查看日志</n-button
-      >
+      <n-alert v-if="task.error" type="warning" :bordered="false">
+        {{
+          task.error
+        }}
+      </n-alert>
+      <n-button quaternary @click="inspectTask(task.id, 'DNS 设置日志')">
+        查看日志
+      </n-button>
     </section>
   </div>
 </template>

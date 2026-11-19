@@ -333,14 +333,16 @@ onUnmounted(() => {
   <section class="panel page-stack">
     <div class="toolbar">
       <h2>离线签名包</h2>
-      <NButton :loading="reading" :disabled="busy || !permitted" @click="load"
-        >刷新上传</NButton
-      >
+      <NButton :loading="reading" :disabled="busy || !permitted" @click="load">
+        刷新上传
+      </NButton>
     </div>
     <p>
       上传发布清单、签名及原始归档。接收完成后检查目标依赖，并在软件商店区确认准备。
     </p>
-    <NAlert v-if="!available" type="warning">离线接收器当前不可用。</NAlert>
+    <NAlert v-if="!available" type="warning">
+      离线接收器当前不可用。
+    </NAlert>
     <NFormItem label="选择方式">
       <NSelect
         v-model:value="selection"
@@ -388,22 +390,26 @@ onUnmounted(() => {
         @change="file($event, 'signature')"
       />
     </NFormItem>
-    <NCheckbox v-model:checked="prerelease" :disabled="busy || !!pendingStart"
-      >允许 Beta 版本</NCheckbox
-    >
+    <NCheckbox v-model:checked="prerelease" :disabled="busy || !!pendingStart">
+      允许 Beta 版本
+    </NCheckbox>
     <NButton
       :loading="busy && !!pendingStart"
       :disabled="
         !writable ||
-        !!pendingCheck ||
-        (!pendingStart && (!manifest || !signature))
+          !!pendingCheck ||
+          (!pendingStart && (!manifest || !signature))
       "
       @click="start"
     >
       {{ pendingStart ? "重试原清单请求" : "验签并创建上传" }}
     </NButton>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
     <NFormItem v-if="options.length" label="上传记录">
       <NSelect
         v-model:value="selected"
@@ -437,35 +443,37 @@ onUnmounted(() => {
         <NButton
           :disabled="
             !writable ||
-            !sourceReady ||
-            chosen.complete ||
-            !!pendingStart ||
-            !!pendingCheck
+              !sourceReady ||
+              chosen.complete ||
+              !!pendingStart ||
+              !!pendingCheck
           "
           @click="upload"
-          >上传 / 继续</NButton
         >
-        <NButton v-if="uploading" :disabled="paused" @click="paused = true"
-          >暂停上传</NButton
-        >
+          上传 / 继续
+        </NButton>
+        <NButton v-if="uploading" :disabled="paused" @click="paused = true">
+          暂停上传
+        </NButton>
         <NButton
           :disabled="
             !writable ||
-            !!pendingStart ||
-            (!pendingCheck && (!sourceReady || !chosen.complete))
+              !!pendingStart ||
+              (!pendingCheck && (!sourceReady || !chosen.complete))
           "
           @click="check"
-          >{{ pendingCheck ? "重试原检查请求" : "检查目标依赖" }}</NButton
         >
+          {{ pendingCheck ? "重试原检查请求" : "检查目标依赖" }}
+        </NButton>
         <NPopconfirm
           :disabled="!canClear || !!pendingStart || !!pendingCheck"
           @positive-click="clear"
         >
-          <template #trigger
-            ><NButton :disabled="!canClear || !!pendingStart || !!pendingCheck"
-              >清除上传归档</NButton
-            ></template
-          >
+          <template #trigger>
+            <NButton :disabled="!canClear || !!pendingStart || !!pendingCheck">
+              清除上传归档
+            </NButton>
+          </template>
           清除后此上传不能再用于准备，已准备或已安装的版本不受影响。
         </NPopconfirm>
       </div>

@@ -180,18 +180,20 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
 </script>
 <template>
   <Teleport defer to="#page-heading-actions">
-    <NButton :loading="reading" @click="load">刷新</NButton>
-    <NButton :disabled="!tasks.length" @click="showHistory = true"
-      >操作记录</NButton
-    >
+    <NButton :loading="reading" @click="load">
+      刷新
+    </NButton>
+    <NButton :disabled="!tasks.length" @click="showHistory = true">
+      操作记录
+    </NButton>
   </Teleport>
   <div class="page-stack">
     <NAlert v-if="error || overview?.component_error" type="error">
       {{ error || overview?.component_error }}
     </NAlert>
-    <NAlert v-if="active" type="info" :bordered="false"
-      >软件操作正在处理，可在“操作记录”中查看进度和日志。</NAlert
-    >
+    <NAlert v-if="active" type="info" :bordered="false">
+      软件操作正在处理，可在“操作记录”中查看进度和日志。
+    </NAlert>
     <section class="store-workspace">
       <div class="store-filters">
         <NInput
@@ -250,17 +252,18 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
             </template>
           </SoftwareCard>
         </div>
-        <NEmpty v-else class="store-empty" description="没有符合条件的软件"
-          ><template #extra
-            ><NButton
+        <NEmpty v-else class="store-empty" description="没有符合条件的软件">
+          <template #extra>
+            <NButton
               @click="
                 search = '';
                 statusFilter = 'all';
               "
-              >清除筛选</NButton
-            ></template
-          ></NEmpty
-        >
+            >
+              清除筛选
+            </NButton>
+          </template>
+        </NEmpty>
       </template>
     </section>
   </div>
@@ -291,11 +294,13 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
         @task="recordTask"
       />
     </div>
-    <template #footer
-      ><div class="dialog-footer">
-        <NButton :disabled="detailBusy" @click="closeDetails">关闭</NButton>
-      </div></template
-    >
+    <template #footer>
+      <div class="dialog-footer">
+        <NButton :disabled="detailBusy" @click="closeDetails">
+          关闭
+        </NButton>
+      </div>
+    </template>
   </NModal>
   <NModal
     v-model:show="showHistory"
@@ -310,8 +315,7 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
         class="record-card"
       >
         <div class="section-heading">
-          <strong>{{ softwareTaskLabel(item) }}</strong
-          ><NTag
+          <strong>{{ softwareTaskLabel(item) }}</strong><NTag
             :bordered="false"
             :type="
               item.state === 'succeeded'
@@ -320,16 +324,18 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
                   ? 'error'
                   : 'info'
             "
-            >{{ stateLabels[item.state] || "正在处理" }}</NTag
           >
+            {{ stateLabels[item.state] || "正在处理" }}
+          </NTag>
         </div>
         <div class="history-footer">
           <span class="muted">{{
             new Date(item.created_at * 1000).toLocaleString()
-          }}</span
-          ><TaskLogButton :task-id="item.id" />
+          }}</span><TaskLogButton :task-id="item.id" />
         </div>
-        <p v-if="item.error" class="error">{{ item.error }}</p>
+        <p v-if="item.error" class="error">
+          {{ item.error }}
+        </p>
       </article>
     </div>
   </NModal>

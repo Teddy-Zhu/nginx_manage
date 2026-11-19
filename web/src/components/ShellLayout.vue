@@ -89,22 +89,23 @@ onUnmounted(() => {
 <template>
   <div class="app-shell">
     <aside class="sidebar">
-      <router-link class="brand" to="/"
-        ><span class="brand-mark">N</span
-        ><span>Nginx<span class="brand-light">Panel</span></span></router-link
-      >
+      <router-link class="brand" to="/">
+        <span class="brand-mark">N</span><span>Nginx<span class="brand-light">Panel</span></span>
+      </router-link>
       <nav class="nav-list" aria-label="主导航">
         <div v-for="group in groups" :key="group.name" class="nav-group">
-          <div class="sidebar-label">{{ group.name }}</div>
+          <div class="sidebar-label">
+            {{ group.name }}
+          </div>
           <router-link
             v-for="link in group.items"
             :key="link.path"
             :to="link.path"
             class="nav-link"
             :class="{ active: link.active }"
-            ><span class="nav-symbol">{{ link.meta.symbol }}</span
-            >{{ link.meta.title }}</router-link
           >
+            <span class="nav-symbol">{{ link.meta.symbol }}</span>{{ link.meta.title }}
+          </router-link>
         </div>
       </nav>
       <div class="sidebar-bottom">
@@ -119,8 +120,9 @@ onUnmounted(() => {
             v-if="currentOperation"
             size="small"
             @click="operationVisible = true"
-            >操作进度</NButton
           >
+            操作进度
+          </NButton>
           <template
             v-if="
               canManageNodes && (nodes.connections.length || nodes.selected)
@@ -137,18 +139,22 @@ onUnmounted(() => {
               @update:value="selectNode"
             />
           </template>
-          <n-tag size="small" :bordered="false">{{
-            route.meta.localOnly ? "本机" : currentNode
-          }}</n-tag
-          ><span class="username">{{ session.me?.username }}</span
-          ><n-button text @click="logout">退出</n-button>
+          <n-tag size="small" :bordered="false">
+            {{
+              route.meta.localOnly ? "本机" : currentNode
+            }}
+          </n-tag><span class="username">{{ session.me?.username }}</span><n-button text @click="logout">
+            退出
+          </n-button>
         </div>
       </header>
       <main class="content">
         <div class="page-heading">
           <div>
             <h1>{{ title }}</h1>
-            <p v-if="route.meta.subtitle">{{ route.meta.subtitle }}</p>
+            <p v-if="route.meta.subtitle">
+              {{ route.meta.subtitle }}
+            </p>
           </div>
           <div id="page-heading-actions" />
         </div>
@@ -163,15 +169,18 @@ onUnmounted(() => {
             size="small"
             :disabled="busy || nodes.switching"
             @click="selectNode(nodes.selected.connection)"
-            >重新检查连接</n-button
           >
+            重新检查连接
+          </n-button>
         </n-alert>
-        <NAlert v-if="liveDisconnected" type="warning" class="live-warning"
-          >实时状态更新暂时中断，正在重新连接。您可以手动刷新查看最新状态。</NAlert
-        >
+        <NAlert v-if="liveDisconnected" type="warning" class="live-warning">
+          实时状态更新暂时中断，正在重新连接。您可以手动刷新查看最新状态。
+        </NAlert>
         <slot />
       </main>
-      <footer class="footer">NginxPanel</footer>
+      <footer class="footer">
+        NginxPanel
+      </footer>
     </div>
   </div>
 </template>

@@ -115,10 +115,11 @@ const lines = computed(() => {
 <template>
   <div class="source-diff">
     <div class="diff-heading">
-      <span>{{ beforeLabel }} → {{ afterLabel }}</span
-      ><n-button v-if="lines" size="small" @click="raw = !raw">{{
-        raw ? "逐行差异" : "原文对照"
-      }}</n-button>
+      <span>{{ beforeLabel }} → {{ afterLabel }}</span><n-button v-if="lines" size="small" @click="raw = !raw">
+        {{
+          raw ? "逐行差异" : "原文对照"
+        }}
+      </n-button>
     </div>
     <div v-if="raw || !lines" class="raw-columns">
       <div>
@@ -138,12 +139,9 @@ const lines = computed(() => {
         :class="row.kind"
         role="row"
       >
-        <span class="line-number">{{ row.old ?? "" }}</span
-        ><span class="line-number">{{ row.next ?? "" }}</span
-        ><span class="diff-sign">{{
+        <span class="line-number">{{ row.old ?? "" }}</span><span class="line-number">{{ row.next ?? "" }}</span><span class="diff-sign">{{
           row.kind === "removed" ? "−" : row.kind === "added" ? "+" : " "
-        }}</span
-        ><span class="line-text">{{ row.text || " " }}</span>
+        }}</span><span class="line-text">{{ row.text || " " }}</span>
       </div>
     </div>
     <p

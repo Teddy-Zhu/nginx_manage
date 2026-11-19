@@ -53,7 +53,9 @@ const themeOverrides: GlobalThemeOverrides = {
           <SoftwareGate v-if="!nodes.switching" :key="`${nodes.generation}:${route.path}`" :software="route.meta.software">
             <router-view />
           </SoftwareGate>
-          <p v-else class="muted">正在连接服务器…</p>
+          <p v-else class="muted">
+            正在连接服务器…
+          </p>
         </shell-layout>
       </n-message-provider>
     </n-dialog-provider>

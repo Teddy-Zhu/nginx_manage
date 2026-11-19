@@ -58,7 +58,9 @@ const stages: Record<string, string> = {
     <p v-if="status.stage === 'prepared'">
       可信软件下载完成；请核对实例安装与运行状态后重新预检。
     </p>
-    <p v-if="status.error">{{ status.error }}</p>
+    <p v-if="status.error">
+      {{ status.error }}
+    </p>
     <div class="button-row">
       <TaskLogButton
         v-if="status.check_task_id"

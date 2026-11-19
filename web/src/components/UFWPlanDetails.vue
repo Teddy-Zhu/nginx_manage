@@ -36,7 +36,9 @@ const columns: DataTableColumns<Entry> = [
 </script>
 
 <template>
-  <n-alert type="info" :bordered="false">{{ plan.reason }}</n-alert>
+  <n-alert type="info" :bordered="false">
+    {{ plan.reason }}
+  </n-alert>
   <n-alert
     v-for="warning in plan.warnings"
     :key="warning"
@@ -55,27 +57,43 @@ const columns: DataTableColumns<Entry> = [
     <dt>入口保护 / 覆盖相同条件的业务项</dt>
     <dd>{{ plan.protection_rules }} 条 / {{ plan.protection_overrides }} 条</dd>
     <dt>固定配置基线</dt>
-    <dd class="digest">{{ plan.configuration_hash }}</dd>
+    <dd class="digest">
+      {{ plan.configuration_hash }}
+    </dd>
     <dt>UFW 可执行文件摘要</dt>
-    <dd class="digest">{{ plan.tool_hash }}</dd>
+    <dd class="digest">
+      {{ plan.tool_hash }}
+    </dd>
     <dt>UFW 源码与工具绑定摘要</dt>
-    <dd class="digest">{{ plan.toolchain_hash }}</dd>
+    <dd class="digest">
+      {{ plan.toolchain_hash }}
+    </dd>
     <dt>Python 版本</dt>
     <dd>{{ plan.python_version }}</dd>
     <dt>完整预演输出摘要</dt>
-    <dd class="digest">{{ plan.dry_run_hash }}</dd>
+    <dd class="digest">
+      {{ plan.dry_run_hash }}
+    </dd>
     <dt>生成原生规则摘要</dt>
-    <dd class="digest">{{ plan.native_program_hash }}</dd>
+    <dd class="digest">
+      {{ plan.native_program_hash }}
+    </dd>
     <dt>完整候选批次摘要</dt>
-    <dd class="digest">{{ plan.batch_hash }}</dd>
+    <dd class="digest">
+      {{ plan.batch_hash }}
+    </dd>
     <dt>原运行后端</dt>
     <dd>{{ plan.reload_backend }}</dd>
     <dt>重载范围</dt>
     <dd>{{ plan.reload_chains }} 个用户链 / {{ plan.reload_rules }} 条报文规则</dd>
     <dt>原运行规则摘要</dt>
-    <dd class="digest">{{ plan.reload_hash }}</dd>
+    <dd class="digest">
+      {{ plan.reload_hash }}
+    </dd>
     <dt>完整程序摘要</dt>
-    <dd class="digest">{{ programHash }}</dd>
+    <dd class="digest">
+      {{ programHash }}
+    </dd>
   </dl>
   <n-data-table
     :columns="columns"

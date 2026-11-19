@@ -407,7 +407,9 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
     <section class="panel page-stack">
       <div class="toolbar">
         <h2>Nginx 版本管理</h2>
-        <NButton :loading="reading" @click="load(true)"> 刷新 </NButton>
+        <NButton :loading="reading" @click="load(true)">
+          刷新
+        </NButton>
       </div>
       <div v-if="currentEngine" class="button-row">
         <span class="muted">已安装</span>
@@ -457,18 +459,17 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
               : last.state === "failed"
                 ? "未完成"
                 : "正在处理"
-          }} </NTag
-        ><TaskLogButton :task-id="last.id" />
+          }}
+        </NTag><TaskLogButton :task-id="last.id" />
       </div>
       <section v-if="release" class="page-stack">
         <div class="toolbar">
-          <strong
-            >组件 {{ release.version
-            }}<template v-if="engineVersion">
-              · Nginx {{ engineVersion }}</template
-            ></strong
-          >
-          <NTag v-if="preparedForRelease" type="success"> 已准备 </NTag>
+          <strong>组件 {{ release.version
+          }}<template v-if="engineVersion">
+            · Nginx {{ engineVersion }}</template></strong>
+          <NTag v-if="preparedForRelease" type="success">
+            已准备
+          </NTag>
         </div>
         <NAlert v-if="engineMismatch" type="error">
           发行中的 Nginx 版本与所选版本不一致，请刷新版本列表后重新选择。
@@ -483,15 +484,15 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
             :loading="busy || active"
             :disabled="
               !canWrite ||
-              active ||
-              engineMismatch ||
-              !checked?.result?.runtime_ready ||
-              release.expires_at * 1000 <= Date.now()
+                active ||
+                engineMismatch ||
+                !checked?.result?.runtime_ready ||
+                release.expires_at * 1000 <= Date.now()
             "
             @click="prepare"
           >
-            准备镜像 </NButton
-          ><TaskLogButton
+            准备镜像
+          </NButton><TaskLogButton
             v-if="preparedForRelease"
             :task-id="preparedForRelease.id"
           />
@@ -527,8 +528,8 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           <template #trigger>
             <NButton type="primary" :disabled="!canCreate" :loading="busy">
               立即更新
-            </NButton> </template
-          >确认将 Nginx 更新到 {{ chosen?.result?.release?.version }}？
+            </NButton>
+          </template>确认将 Nginx 更新到 {{ chosen?.result?.release?.version }}？
         </NPopconfirm>
       </div>
     </section>
@@ -538,8 +539,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
       <article v-for="task in tasks" :key="task.id" class="panel page-stack">
         <TaskLogButton :task-id="task.id" />
         <div class="toolbar">
-          <strong>{{ states[task.state] ?? "状态待确认" }}</strong
-          ><NTag
+          <strong>{{ states[task.state] ?? "状态待确认" }}</strong><NTag
             :type="
               task.state === 'succeeded'
                 ? 'success'
@@ -574,8 +574,10 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
         <div v-if="canResume(task)">
           <NPopconfirm positive-text="继续更新" @positive-click="resume(task)">
             <template #trigger>
-              <NButton :loading="busy"> 继续更新 </NButton> </template
-            >确认继续更新？失败时将恢复原版本。
+              <NButton :loading="busy">
+                继续更新
+              </NButton>
+            </template>确认继续更新？失败时将恢复原版本。
           </NPopconfirm>
         </div>
       </article>

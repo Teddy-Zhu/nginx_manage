@@ -226,9 +226,9 @@ onUnmounted(stop);
     :mask-closable="false"
   >
     <div class="operation-dialog-body page-stack">
-      <NAlert v-if="currentOperation?.submitting" type="info"
-        ><NSpin size="small" /> 正在提交操作，请稍候…</NAlert
-      >
+      <NAlert v-if="currentOperation?.submitting" type="info">
+        <NSpin size="small" /> 正在提交操作，请稍候…
+      </NAlert>
       <NAlert
         v-if="currentOperation?.error"
         :type="currentOperation.uncertain ? 'warning' : 'error'"
@@ -242,25 +242,27 @@ onUnmounted(stop);
       <NAlert
         v-if="
           currentOperation?.requestOnly &&
-          !currentOperation.submitting &&
-          !currentOperation.error
+            !currentOperation.submitting &&
+            !currentOperation.error
         "
         type="success"
-        >操作已完成。</NAlert
       >
+        操作已完成。
+      </NAlert>
       <template v-if="currentOperation?.taskId">
         <div class="toolbar">
           <div class="operation-state">
             <NSpin v-if="active || (!task && reading)" size="small" /><NTag
               :type="tagType"
-              >{{
-                task ? (taskStates[state] ?? "状态待确认") : "正在查询状态"
-              }}</NTag
             >
+              {{
+                task ? (taskStates[state] ?? "状态待确认") : "正在查询状态"
+              }}
+            </NTag>
           </div>
-          <NButton size="small" :loading="reading" @click="refresh?.()"
-            >刷新</NButton
-          >
+          <NButton size="small" :loading="reading" @click="refresh?.()">
+            刷新
+          </NButton>
         </div>
         <div v-if="task" class="surface page-stack">
           <strong>{{
@@ -273,29 +275,32 @@ onUnmounted(stop);
           <p v-if="active" class="muted">
             任务正在后台执行，进度和日志将自动更新。
           </p>
-          <p v-if="needsAttention">请返回原操作页面确认或恢复任务。</p>
+          <p v-if="needsAttention">
+            请返回原操作页面确认或恢复任务。
+          </p>
         </div>
-        <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态"
-          >{{ statusError }}。任务可能仍在执行，请刷新后确认。</NAlert
-        >
+        <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态">
+          {{ statusError }}。任务可能仍在执行，请刷新后确认。
+        </NAlert>
         <NAlert
           v-if="task?.last_error"
           :type="task.state === 'failed' ? 'error' : 'warning'"
           title="执行详情"
-          >{{ task.last_error }}</NAlert
         >
+          {{ task.last_error }}
+        </NAlert>
         <div class="toolbar">
           <h3>执行日志</h3>
-          <span v-if="checkedAt" class="muted"
-            >更新于 {{ new Date(checkedAt).toLocaleTimeString() }}</span
-          >
+          <span v-if="checkedAt" class="muted">更新于 {{ new Date(checkedAt).toLocaleTimeString() }}</span>
         </div>
-        <NAlert v-if="!canReadLogs" type="info"
-          >当前账户没有查看日志的权限。</NAlert
-        >
-        <NAlert v-else-if="logError" type="warning" title="日志暂不可用">{{
-          logError
-        }}</NAlert>
+        <NAlert v-if="!canReadLogs" type="info">
+          当前账户没有查看日志的权限。
+        </NAlert>
+        <NAlert v-else-if="logError" type="warning" title="日志暂不可用">
+          {{
+            logError
+          }}
+        </NAlert>
         <p
           v-else-if="!rows.length && !softwareLog && !softwareMessage"
           class="muted"
@@ -312,23 +317,30 @@ onUnmounted(stop);
             :key="`${row.time}-${index}`"
             :class="{ 'log-error': row.level === 'error' }"
           >
-            <time>{{ date(row.time) }}</time
-            ><span>{{ eventLabel(row) }}</span>
+            <time>{{ date(row.time) }}</time><span>{{ eventLabel(row) }}</span>
           </li>
         </ol>
-        <NAlert v-if="softwareError" type="warning" title="操作详情暂不可用">{{
-          softwareError
-        }}</NAlert>
-        <p v-if="canReadLogs && softwareMessage">{{ softwareMessage }}</p>
+        <NAlert v-if="softwareError" type="warning" title="操作详情暂不可用">
+          {{
+            softwareError
+          }}
+        </NAlert>
+        <p v-if="canReadLogs && softwareMessage">
+          {{ softwareMessage }}
+        </p>
         <pre v-if="canReadLogs && softwareLog" class="software-log">{{
           softwareLog
         }}</pre>
-        <NAlert v-if="logNotice" type="warning">{{ logNotice }}</NAlert>
+        <NAlert v-if="logNotice" type="warning">
+          {{ logNotice }}
+        </NAlert>
       </template>
     </div>
     <template #footer>
       <div class="operation-dialog-footer">
-        <NButton @click="operationVisible = false">关闭</NButton>
+        <NButton @click="operationVisible = false">
+          关闭
+        </NButton>
       </div>
     </template>
   </NModal>

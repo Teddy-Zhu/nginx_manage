@@ -508,54 +508,64 @@ useLiveRefresh(api, ["tasks"], () => {
 <template>
   <div class="page-stack">
     <div class="toolbar">
-      <p class="muted">导出本机配置，或从配置包、其他服务器迁入。</p>
-      <RouterLink to="/migration-push">迁移到其他服务器 →</RouterLink>
+      <p class="muted">
+        导出本机配置，或从配置包、其他服务器迁入。
+      </p>
+      <RouterLink to="/migration-push">
+        迁移到其他服务器 →
+      </RouterLink>
     </div>
-    <NAlert type="info"
-      >导入前会检查目标环境与所需软件。保存或应用迁入配置将替换目标 Nginx
-      配置，请先备份。</NAlert
-    >
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    <NAlert type="info">
+      导入前会检查目标环境与所需软件。保存或应用迁入配置将替换目标 Nginx
+      配置，请先备份。
+    </NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
     <section class="panel page-stack">
       <NTabs v-model:value="transferTab" type="line" animated>
-        <NTabPane v-if="canExport" name="export" tab="导出配置"
-          ><div class="page-stack">
-            <p class="muted">选择配置包类型后下载到本机。</p>
-            <NFormItem label="配置包类型"
-              ><NSelect
+        <NTabPane v-if="canExport" name="export" tab="导出配置">
+          <div class="page-stack">
+            <p class="muted">
+              选择配置包类型后下载到本机。
+            </p>
+            <NFormItem label="配置包类型">
+              <NSelect
                 v-model:value="exportMode"
                 :options="exportOptions"
                 :disabled="busy"
-            /></NFormItem>
+              />
+            </NFormItem>
             <NAlert v-if="exportMode === 'portable'" type="warning">
               仅导出网站基础设置和访问规则，不包含自定义配置、密码等敏感信息。导入的网站默认停用，请检查配置后再启用。
             </NAlert>
-            <NFormItem v-if="exportMode === 'encrypted'" label="加密口令"
-              ><NInput
+            <NFormItem v-if="exportMode === 'encrypted'" label="加密口令">
+              <NInput
                 v-model:value="passphrase"
                 type="password"
                 show-password-on="click"
                 placeholder="16–256 字节，单独保管"
                 autocomplete="new-password"
-            /></NFormItem>
+              />
+            </NFormItem>
             <div v-if="exportMode === 'encrypted'" class="choice-grid">
-              <NCheckbox v-model:checked="includeCertificates"
-                >包含证书与私钥</NCheckbox
-              ><NCheckbox v-model:checked="includeCredentials"
-                >包含 DNS 凭据</NCheckbox
-              ><NCheckbox v-model:checked="includeAutomation"
-                >包含 ACME 账户与签发配置</NCheckbox
-              ><NCheckbox v-model:checked="includeNotifications"
-                >包含通知渠道及凭据</NCheckbox
-              ><NCheckbox v-model:checked="includeHostDNS"
-                >主机 DNS 已保存配置</NCheckbox
-              ><NCheckbox v-model:checked="includeMonitoring"
-                >包含监控配置</NCheckbox
-              ><NCheckbox v-model:checked="includeFail2ban"
-                >包含登录防护配置</NCheckbox
-              ><NCheckbox v-model:checked="includeFirewall"
-                >包含防火墙规则</NCheckbox
-              >
+              <NCheckbox v-model:checked="includeCertificates">
+                包含证书与私钥
+              </NCheckbox><NCheckbox v-model:checked="includeCredentials">
+                包含 DNS 凭据
+              </NCheckbox><NCheckbox v-model:checked="includeAutomation">
+                包含 ACME 账户与签发配置
+              </NCheckbox><NCheckbox v-model:checked="includeNotifications">
+                包含通知渠道及凭据
+              </NCheckbox><NCheckbox v-model:checked="includeHostDNS">
+                主机 DNS 已保存配置
+              </NCheckbox><NCheckbox v-model:checked="includeMonitoring">
+                包含监控配置
+              </NCheckbox><NCheckbox v-model:checked="includeFail2ban">
+                包含登录防护配置
+              </NCheckbox><NCheckbox v-model:checked="includeFirewall">
+                包含防火墙规则
+              </NCheckbox>
             </div>
             <div class="button-row">
               <NButton
@@ -563,72 +573,78 @@ useLiveRefresh(api, ["tasks"], () => {
                 :disabled="busy || !exportReady"
                 :loading="busy"
                 @click="exportPackage"
-                >{{
-                  exportMode === "portable" ? "导出配置包" : "导出加密包"
-                }}</NButton
               >
+                {{
+                  exportMode === "portable" ? "导出配置包" : "导出加密包"
+                }}
+              </NButton>
             </div>
-          </div></NTabPane
-        >
-        <NTabPane v-if="canImport" name="file" tab="从文件导入"
-          ><div class="page-stack">
-            <NFormItem label="配置包"
-              ><input
+          </div>
+        </NTabPane>
+        <NTabPane v-if="canImport" name="file" tab="从文件导入">
+          <div class="page-stack">
+            <NFormItem label="配置包">
+              <input
                 type="file"
                 accept=".age,.tar"
                 :disabled="busy"
                 @change="selectFile"
-            /></NFormItem>
-            <NFormItem v-if="fileEncrypted === true" label="解密口令"
-              ><NInput
+              />
+            </NFormItem>
+            <NFormItem v-if="fileEncrypted === true" label="解密口令">
+              <NInput
                 v-model:value="importPassphrase"
                 type="password"
                 show-password-on="click"
                 autocomplete="off"
-            /></NFormItem>
+              />
+            </NFormItem>
             <div class="button-row">
               <NButton
                 type="primary"
                 :disabled="
                   busy ||
-                  !file ||
-                  fileEncrypted === null ||
-                  (fileEncrypted && importPassphrase.length < 16) ||
-                  !firewallValid ||
-                  !!mappingError ||
-                  !hostDNSValid
+                    !file ||
+                    fileEncrypted === null ||
+                    (fileEncrypted && importPassphrase.length < 16) ||
+                    !firewallValid ||
+                    !!mappingError ||
+                    !hostDNSValid
                 "
                 :loading="busy"
                 @click="previewFile"
-                >预检配置包</NButton
               >
+                预检配置包
+              </NButton>
             </div>
-          </div></NTabPane
-        >
-        <NTabPane v-if="canPull" name="remote" tab="从服务器迁入"
-          ><div class="page-stack">
+          </div>
+        </NTabPane>
+        <NTabPane v-if="canPull" name="remote" tab="从服务器迁入">
+          <div class="page-stack">
             <div class="form-grid">
-              <NFormItem label="源节点 API"
-                ><NInput
+              <NFormItem label="源节点 API">
+                <NInput
                   v-model:value="remoteURL"
                   placeholder="https://source.example.com:9443/api/v1"
                   autocomplete="off"
-              /></NFormItem>
-              <NFormItem label="源节点 API Key"
-                ><NInput
+                />
+              </NFormItem>
+              <NFormItem label="源节点 API Key">
+                <NInput
                   v-model:value="remoteKey"
                   type="password"
                   show-password-on="click"
                   autocomplete="off"
-              /></NFormItem>
+                />
+              </NFormItem>
 
               <div
                 v-if="has('components.manage')"
                 class="full-width page-stack"
               >
-                <NCheckbox v-model:checked="remoteDependencies"
-                  >迁入前自动准备 Nginx 依赖</NCheckbox
-                >
+                <NCheckbox v-model:checked="remoteDependencies">
+                  迁入前自动准备 Nginx 依赖
+                </NCheckbox>
                 <template v-if="remoteDependencies">
                   <NFormItem label="Nginx 组件发行标签（可选）">
                     <NInput
@@ -636,20 +652,20 @@ useLiveRefresh(api, ["tasks"], () => {
                       placeholder="留空使用稳定版"
                     />
                   </NFormItem>
-                  <NCheckbox v-model:checked="dependencyPrerelease"
-                    >允许指定的预发布版本</NCheckbox
-                  >
+                  <NCheckbox v-model:checked="dependencyPrerelease">
+                    允许指定的预发布版本
+                  </NCheckbox>
                   <div v-if="has('system.write')">
-                    <NCheckbox v-model:checked="dependencyInstall"
-                      >授权缺失时安装 Nginx</NCheckbox
-                    >
+                    <NCheckbox v-model:checked="dependencyInstall">
+                      授权缺失时安装 Nginx
+                    </NCheckbox>
                     <template v-if="dependencyInstall">
-                      <NCheckbox v-model:checked="dependencyStart"
-                        >安装后启动</NCheckbox
-                      >
-                      <NCheckbox v-model:checked="dependencyEnable"
-                        >开机自动启动</NCheckbox
-                      >
+                      <NCheckbox v-model:checked="dependencyStart">
+                        安装后启动
+                      </NCheckbox>
+                      <NCheckbox v-model:checked="dependencyEnable">
+                        开机自动启动
+                      </NCheckbox>
                     </template>
                   </div>
                   <p class="muted">
@@ -659,58 +675,61 @@ useLiveRefresh(api, ["tasks"], () => {
               </div>
             </div>
             <div class="choice-grid">
-              <NCheckbox v-model:checked="remoteCertificates"
-                >包含证书与私钥</NCheckbox
-              ><NCheckbox v-model:checked="remoteCredentials"
-                >包含 DNS 凭据</NCheckbox
-              ><NCheckbox v-model:checked="remoteAutomation"
-                >包含 ACME 账户与签发配置</NCheckbox
-              ><NCheckbox
+              <NCheckbox v-model:checked="remoteCertificates">
+                包含证书与私钥
+              </NCheckbox><NCheckbox v-model:checked="remoteCredentials">
+                包含 DNS 凭据
+              </NCheckbox><NCheckbox v-model:checked="remoteAutomation">
+                包含 ACME 账户与签发配置
+              </NCheckbox><NCheckbox
                 v-if="has('notifications.write')"
                 v-model:checked="remoteNotifications"
-                >包含通知渠道及凭据</NCheckbox
-              ><NCheckbox v-model:checked="remoteHostDNS"
-                >主机 DNS 已保存配置</NCheckbox
-              ><NCheckbox v-model:checked="remoteMonitoring"
-                >包含监控配置</NCheckbox
-              ><NCheckbox v-model:checked="remoteFail2ban"
-                >登录防护配置</NCheckbox
-              ><NCheckbox v-model:checked="remoteFirewall"
-                >包含防火墙规则</NCheckbox
               >
+                包含通知渠道及凭据
+              </NCheckbox><NCheckbox v-model:checked="remoteHostDNS">
+                主机 DNS 已保存配置
+              </NCheckbox><NCheckbox v-model:checked="remoteMonitoring">
+                包含监控配置
+              </NCheckbox><NCheckbox v-model:checked="remoteFail2ban">
+                登录防护配置
+              </NCheckbox><NCheckbox v-model:checked="remoteFirewall">
+                包含防火墙规则
+              </NCheckbox>
             </div>
             <div class="button-row">
               <NButton
                 :disabled="
                   busy ||
-                  !remoteURL ||
-                  !remoteKey ||
-                  !firewallValid ||
-                  !!mappingError ||
-                  !hostDNSValid
+                    !remoteURL ||
+                    !remoteKey ||
+                    !firewallValid ||
+                    !!mappingError ||
+                    !hostDNSValid
                 "
                 @click="pull(false)"
-                >拉取并预检</NButton
-              ><NPopconfirm @positive-click="pull(true)"
-                ><template #trigger
-                  ><NButton
+              >
+                拉取并预检
+              </NButton><NPopconfirm @positive-click="pull(true)">
+                <template #trigger>
+                  <NButton
                     type="primary"
                     :disabled="
                       busy ||
-                      !remoteURL ||
-                      !remoteKey ||
-                      !firewallValid ||
-                      !!mappingError ||
-                      !hostDNSValid
+                        !remoteURL ||
+                        !remoteKey ||
+                        !firewallValid ||
+                        !!mappingError ||
+                        !hostDNSValid
                     "
-                    >一键迁入</NButton
-                  ></template
-                >按所选模式迁入，并执行已授权的依赖准备与首次安装。保存或应用将替换目标
-                Nginx 配置。</NPopconfirm
-              >
+                  >
+                    一键迁入
+                  </NButton>
+                </template>按所选模式迁入，并执行已授权的依赖准备与首次安装。保存或应用将替换目标
+                Nginx 配置。
+              </NPopconfirm>
             </div>
-          </div></NTabPane
-        >
+          </div>
+        </NTabPane>
       </NTabs>
     </section>
     <section
@@ -718,12 +737,12 @@ useLiveRefresh(api, ["tasks"], () => {
       class="panel page-stack"
     >
       <h2>导入设置</h2>
-      <NFormItem label="执行模式"
-        ><NSelect v-model:value="mode" :options="options"
-      /></NFormItem>
-      <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx"
-        >允许启用目标 Nginx 配置模块</NCheckbox
-      >
+      <NFormItem label="执行模式">
+        <NSelect v-model:value="mode" :options="options" />
+      </NFormItem>
+      <NCheckbox v-if="has('system.write')" v-model:checked="enableNginx">
+        允许启用目标 Nginx 配置模块
+      </NCheckbox>
       <section>
         <h3>迁移设置</h3>
         <div class="page-stack">
@@ -731,14 +750,15 @@ useLiveRefresh(api, ["tasks"], () => {
             label="参数映射（原参数 → 目标参数）"
             :validation-status="mappingError ? 'error' : undefined"
             :feedback="mappingError"
-            ><MappingInput :max="128" v-model:value="mappings" :disabled="busy"
-          /></NFormItem>
+          >
+            <MappingInput v-model:value="mappings" :max="128" :disabled="busy" />
+          </NFormItem>
           <MigrationHostDNSOptions
             v-model="hostDNSSettings"
             :sources="plan?.host_dns?.entries.map((item) => item.source) ?? []"
-            @update:valid="hostDNSValid = $event"
             :disabled="busy"
             :allow-map="has('host.dns.write')"
+            @update:valid="hostDNSValid = $event"
           />
           <MigrationMonitoringOptions
             v-model="monitoringSettings"
@@ -751,21 +771,25 @@ useLiveRefresh(api, ["tasks"], () => {
           />
           <MigrationFirewallOptions
             v-model="firewallSettings"
-            @update:valid="firewallValid = $event"
             :disabled="busy"
+            @update:valid="firewallValid = $event"
           />
-          <p class="muted">环境映射修改后，请重新预检。</p>
+          <p class="muted">
+            环境映射修改后，请重新预检。
+          </p>
         </div>
       </section>
     </section>
     <section v-if="plan" class="panel page-stack">
-      <NAlert v-if="plan.mode === 'portable'" type="warning"
-        >此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。</NAlert
-      >
+      <NAlert v-if="plan.mode === 'portable'" type="warning">
+        此计划来自可移植配置。迁入站点均已停用，须检查省略项并补齐保护后再启用。
+      </NAlert>
       <div class="actions">
         <h2>迁移计划</h2>
         <NTag>{{ states[plan.state] ?? plan.state }}</NTag>
-        <NTag v-if="plan.pruned_at" type="warning">材料已清理</NTag>
+        <NTag v-if="plan.pruned_at" type="warning">
+          材料已清理
+        </NTag>
       </div>
       <NAlert v-if="plan.pruned_at" type="info">
         迁移材料已于
@@ -778,8 +802,9 @@ useLiveRefresh(api, ["tasks"], () => {
       <NAlert
         v-if="plan.last_error"
         :type="plan.state === 'rolled_back' ? 'warning' : 'error'"
-        >{{ plan.last_error }}</NAlert
       >
+        {{ plan.last_error }}
+      </NAlert>
       <NAlert
         v-if="plan.pull"
         :type="
@@ -795,14 +820,16 @@ useLiveRefresh(api, ["tasks"], () => {
         {{ pullStages[plan.pull.stage] ?? plan.pull.stage }} ·
         {{ options.find((item) => item.value === plan?.pull?.mode)?.label }}
         <p>迁入授权有效期至 {{ time(plan.pull.deadline) }}</p>
-        <p v-if="plan.pull.error">{{ plan.pull.error }}</p>
+        <p v-if="plan.pull.error">
+          {{ plan.pull.error }}
+        </p>
       </NAlert>
       <MigrationHostDNSPreview
         v-if="plan.host_dns"
         :info="plan.host_dns"
         :plan-id="
           !plan.pruned_at &&
-          ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
+            ['draft', 'saved', 'succeeded', 'rolled_back'].includes(plan.state)
             ? plan.id
             : undefined
         "
@@ -818,39 +845,45 @@ useLiveRefresh(api, ["tasks"], () => {
         :status="plan.dependencies"
       />
       <div v-if="plan.state === 'planned'" class="actions">
-        <NButton :disabled="busy" @click="preflight">重新预检</NButton>
+        <NButton :disabled="busy" @click="preflight">
+          重新预检
+        </NButton>
       </div>
       <div
         v-if="
           plan.state === 'planned' &&
-          has('components.manage') &&
-          !continuingPull &&
-          !plan.dependencies
+            has('components.manage') &&
+            !continuingPull &&
+            !plan.dependencies
         "
       >
-        <NFormItem label="Nginx 组件发行标签（可选）"
-          ><NInput v-model:value="dependencyTag" placeholder="留空使用稳定版"
-        /></NFormItem>
-        <NCheckbox v-model:checked="dependencyPrerelease"
-          >允许指定的预发布版本</NCheckbox
-        >
+        <NFormItem label="Nginx 组件发行标签（可选）">
+          <NInput v-model:value="dependencyTag" placeholder="留空使用稳定版" />
+        </NFormItem>
+        <NCheckbox v-model:checked="dependencyPrerelease">
+          允许指定的预发布版本
+        </NCheckbox>
         <div v-if="has('system.write')">
-          <NCheckbox v-model:checked="dependencyInstall"
-            >授权缺失时安装 Nginx</NCheckbox
-          >
+          <NCheckbox v-model:checked="dependencyInstall">
+            授权缺失时安装 Nginx
+          </NCheckbox>
           <template v-if="dependencyInstall">
-            <NCheckbox v-model:checked="dependencyStart">安装后启动</NCheckbox>
-            <NCheckbox v-model:checked="dependencyEnable"
-              >开机自动启动</NCheckbox
-            >
+            <NCheckbox v-model:checked="dependencyStart">
+              安装后启动
+            </NCheckbox>
+            <NCheckbox v-model:checked="dependencyEnable">
+              开机自动启动
+            </NCheckbox>
             <p>安装期间暂停配置写入，完成后恢复并重新预检。</p>
           </template>
         </div>
-        <NPopconfirm @positive-click="prepareDependencies"
-          ><template #trigger
-            ><NButton :disabled="busy">准备 Nginx 依赖</NButton></template
-          >确认准备 Nginx？仅在目标服务器尚未安装 Nginx 时执行安装。</NPopconfirm
-        >
+        <NPopconfirm @positive-click="prepareDependencies">
+          <template #trigger>
+            <NButton :disabled="busy">
+              准备 Nginx 依赖
+            </NButton>
+          </template>确认准备 Nginx？仅在目标服务器尚未安装 Nginx 时执行安装。
+        </NPopconfirm>
       </div>
       <div class="migration-steps">
         <div v-for="(step, i) in plan.steps" :key="i">
@@ -862,43 +895,49 @@ useLiveRefresh(api, ["tasks"], () => {
                   ? 'warning'
                   : 'default'
             "
-            >{{ stepStates[step.state] ?? step.state }}</NTag
-          ><span>{{ step.message }}</span>
+          >
+            {{ stepStates[step.state] ?? step.state }}
+          </NTag><span>{{ step.message }}</span>
         </div>
       </div>
       <ul>
-        <li v-for="item in plan.omissions" :key="item">{{ item }}</li>
+        <li v-for="item in plan.omissions" :key="item">
+          {{ item }}
+        </li>
       </ul>
       <TaskLogButton v-if="plan.task_id" :task-id="plan.task_id" />
-      <NPopconfirm v-if="plan.state === 'planned'" @positive-click="execute"
-        ><template #trigger
-          ><NButton
+      <NPopconfirm v-if="plan.state === 'planned'" @positive-click="execute">
+        <template #trigger>
+          <NButton
             type="primary"
             :loading="busy"
             :disabled="
               busy ||
-              preparingDependencies ||
-              continuingPull ||
-              (mode === 'save' && !plan.can_save) ||
-              (mode === 'apply' && !plan.can_apply)
+                preparingDependencies ||
+                continuingPull ||
+                (mode === 'save' && !plan.can_save) ||
+                (mode === 'apply' && !plan.can_apply)
             "
-            >执行计划</NButton
-          ></template
-        >{{
+          >
+            执行计划
+          </NButton>
+        </template>{{
           mode === "draft"
             ? "保存为独立草稿。"
             : "替换目标 Nginx 配置；应用失败时恢复原配置。"
-        }}</NPopconfirm
-      >
+        }}
+      </NPopconfirm>
     </section>
     <section v-if="history.length" class="panel page-stack">
       <h2>迁移记录</h2>
       <div v-for="item in history" :key="item.id" class="actions">
-        <NButton text :disabled="busy" @click="selectPlan(item.id)">{{
-          `查看记录 · ${time(item.expires_at)}`
-        }}</NButton
-        ><NTag>{{ states[item.state] ?? item.state }}</NTag
-        ><NTag v-if="item.pruned_at" type="warning">材料已清理</NTag>
+        <NButton text :disabled="busy" @click="selectPlan(item.id)">
+          {{
+            `查看记录 · ${time(item.expires_at)}`
+          }}
+        </NButton><NTag>{{ states[item.state] ?? item.state }}</NTag><NTag v-if="item.pruned_at" type="warning">
+          材料已清理
+        </NTag>
       </div>
     </section>
   </div>

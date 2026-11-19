@@ -11,9 +11,11 @@ function state(value: boolean | null, yes: string, no: string) {
   <div class="page-stack">
     <div class="actions">
       <h4>netplan 上游配置</h4>
-      <NTag type="info">{{
-        source.state === "associated" ? "已关联来源" : "来源待确认"
-      }}</NTag>
+      <NTag type="info">
+        {{
+          source.state === "associated" ? "已关联来源" : "来源待确认"
+        }}
+      </NTag>
     </div>
     <dl>
       <template v-if="source.definition">
@@ -48,11 +50,13 @@ function state(value: boolean | null, yes: string, no: string) {
         <dt>IPv6 RA</dt>
         <dd>{{ state(source.settings.accept_ra, "允许", "忽略") }}</dd>
       </template>
-      <template v-else
-        ><dt>源 DNS 字段</dt>
-        <dd>无法完整确认</dd></template
-      >
+      <template v-else>
+        <dt>源 DNS 字段</dt>
+        <dd>无法完整确认</dd>
+      </template>
     </dl>
-    <NAlert v-if="source.reason" type="warning">{{ source.reason }}</NAlert>
+    <NAlert v-if="source.reason" type="warning">
+      {{ source.reason }}
+    </NAlert>
   </div>
 </template>

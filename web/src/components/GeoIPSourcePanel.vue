@@ -112,27 +112,31 @@ async function update() {
             size="small"
             :type="state.ready ? 'success' : 'warning'"
             :bordered="false"
-            >{{ state.ready ? "已就绪" : "待更新" }}</n-tag
           >
+            {{ state.ready ? "已就绪" : "待更新" }}
+          </n-tag>
         </div>
-        <p class="muted">为国家和地区黑白名单提供 IP 地址数据。</p>
+        <p class="muted">
+          为国家和地区黑白名单提供 IP 地址数据。
+        </p>
       </div>
       <n-space :size="12">
         <slot name="actions" />
-        <n-button :disabled="busy || !writable || !state" @click="openSettings"
-          >修改数据源</n-button
-        >
+        <n-button :disabled="busy || !writable || !state" @click="openSettings">
+          修改数据源
+        </n-button>
         <n-button
           type="primary"
           :loading="busy"
           :disabled="
             !writable ||
-            !state ||
-            (state.source.format === 'cidr' && !selected.length)
+              !state ||
+              (state.source.format === 'cidr' && !selected.length)
           "
           @click="update"
-          >更新数据</n-button
         >
+          更新数据
+        </n-button>
       </n-space>
     </div>
     <dl class="source-info">
@@ -186,9 +190,9 @@ async function update() {
         :disabled="busy || !writable"
       />
     </n-form-item>
-    <n-alert v-if="state && !state.ready" type="info" :show-icon="false"
-      >请先更新数据，再添加国家黑白名单。</n-alert
-    >
+    <n-alert v-if="state && !state.ready" type="info" :show-icon="false">
+      请先更新数据，再添加国家黑白名单。
+    </n-alert>
     <p v-if="countries.length" class="muted">
       国家名单更新后，保存并应用规则即可生效。
     </p>
@@ -204,52 +208,58 @@ async function update() {
   >
     <n-form-item label="常用数据源" class="full-width">
       <n-space>
-        <n-button :disabled="busy || !writable" @click="preset('mmdb')"
-          >GitHub MMDB</n-button
-        >
-        <n-button :disabled="busy || !writable" @click="preset('cidr')"
-          >IPdeny CIDR</n-button
-        >
+        <n-button :disabled="busy || !writable" @click="preset('mmdb')">
+          GitHub MMDB
+        </n-button>
+        <n-button :disabled="busy || !writable" @click="preset('cidr')">
+          IPdeny CIDR
+        </n-button>
       </n-space>
     </n-form-item>
-    <n-form-item label="数据源名称"
-      ><n-input
+    <n-form-item label="数据源名称">
+      <n-input
         v-model:value="draft.name"
         :disabled="busy || !writable"
         maxlength="128"
-    /></n-form-item>
-    <n-form-item label="文件格式"
-      ><n-select
+      />
+    </n-form-item>
+    <n-form-item label="文件格式">
+      <n-select
         v-model:value="draft.format"
         :options="formats"
         :disabled="busy || !writable"
-    /></n-form-item>
+      />
+    </n-form-item>
     <n-form-item
       :label="draft.format === 'mmdb' ? '数据库下载地址' : 'IPv4 下载地址'"
       class="full-width"
-      ><n-input
+    >
+      <n-input
         v-model:value="draft.url"
         :disabled="busy || !writable"
         placeholder="https://"
-    /></n-form-item>
+      />
+    </n-form-item>
     <template v-if="draft.format === 'cidr'">
-      <n-form-item label="IPv6 下载地址（可选）" class="full-width"
-        ><n-input
+      <n-form-item label="IPv6 下载地址（可选）" class="full-width">
+        <n-input
           v-model:value="draft.ipv6_url"
           :disabled="busy || !writable"
           placeholder="https://"
-      /></n-form-item>
+        />
+      </n-form-item>
       <p class="muted full-width">
         地址中的 {country} 会替换为国家代码，例如 cn。支持每行一个 IP 或 CIDR
         的地址列表。
       </p>
     </template>
     <section class="full-width">
-      <n-form-item label="允许从内网镜像下载"
-        ><n-switch
+      <n-form-item label="允许从内网镜像下载">
+        <n-switch
           v-model:value="draft.allow_private_network"
           :disabled="busy || !writable"
-      /></n-form-item>
+        />
+      </n-form-item>
     </section>
   </FormDialog>
 </template>

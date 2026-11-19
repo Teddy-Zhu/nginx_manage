@@ -30,7 +30,9 @@ function describe(config: HostDNSPlanInput["config"]) {
   <div class="surface">
     <h3>主机 DNS</h3>
     <p>{{ stateLabels[info.state] }}</p>
-    <p v-if="!info.entries.length">来源服务器没有已保存的 DNS 配置。</p>
+    <p v-if="!info.entries.length">
+      来源服务器没有已保存的 DNS 配置。
+    </p>
     <dl v-for="item in info.entries" :key="item.source" class="details">
       <dt>来源网络</dt>
       <dd>{{ dnsLocationLabel(item.source) }}</dd>
@@ -57,8 +59,9 @@ function describe(config: HostDNSPlanInput["config"]) {
               path: '/host-dns',
               query: { migration: planId, source: item.source },
             }"
-            >在目标 DNS 页面配置</RouterLink
           >
+            在目标 DNS 页面配置
+          </RouterLink>
         </dd>
       </template>
     </dl>

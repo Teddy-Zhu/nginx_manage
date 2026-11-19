@@ -144,9 +144,13 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="page-stack">
-    <NAlert v-if="!canManage" type="warning">需要远程服务管理权限。</NAlert>
+    <NAlert v-if="!canManage" type="warning">
+      需要远程服务管理权限。
+    </NAlert>
     <template v-else>
-      <NAlert v-if="error" type="error">{{ error }}</NAlert>
+      <NAlert v-if="error" type="error">
+        {{ error }}
+      </NAlert>
       <section class="panel page-stack">
         <div class="toolbar">
           <h2>远程服务器</h2>
@@ -155,19 +159,22 @@ onUnmounted(() => {
               :loading="!!checking.length"
               :disabled="!selected.length || busy"
               @click="check(selected)"
-              >检查所选连接<span v-if="selected.length"
-                >（{{ selected.length }}）</span
-              ></NButton
-            ><NButton :disabled="busy" @click="load">刷新</NButton
-            ><NButton
+            >
+              检查所选连接<span v-if="selected.length">（{{ selected.length }}）</span>
+            </NButton><NButton :disabled="busy" @click="load">
+              刷新
+            </NButton><NButton
               type="primary"
               :disabled="busy || !!checking.length"
               @click="adding = true"
-              >添加远程服务器</NButton
             >
+              添加远程服务器
+            </NButton>
           </div>
         </div>
-        <p v-if="!active.length" class="empty-state">尚未添加远程服务器。</p>
+        <p v-if="!active.length" class="empty-state">
+          尚未添加远程服务器。
+        </p>
         <div v-else class="record-list">
           <article v-for="node in active" :key="node.id" class="record-card">
             <div class="toolbar">
@@ -175,24 +182,29 @@ onUnmounted(() => {
                 :checked="selected.includes(node.id)"
                 :disabled="
                   busy ||
-                  !!checking.length ||
-                  node.state === 'removing' ||
-                  (!selected.includes(node.id) && selected.length >= 8)
+                    !!checking.length ||
+                    node.state === 'removing' ||
+                    (!selected.includes(node.id) && selected.length >= 8)
                 "
                 @update:checked="(value: boolean) => select(node.id, value)"
-                ><strong>{{ node.name }}</strong></NCheckbox
               >
+                <strong>{{ node.name }}</strong>
+              </NCheckbox>
               <NTag
                 :type="node.state === 'connected' ? 'success' : 'warning'"
-                >{{ states[node.state] ?? node.state }}</NTag
               >
+                {{ states[node.state] ?? node.state }}
+              </NTag>
             </div>
-            <p class="record-address">{{ node.url }}</p>
+            <p class="record-address">
+              {{ node.url }}
+            </p>
             <div class="record-meta">
-              <span>最近检查 {{ date(node.checked_at) }}</span
-              ><span>授权到期 {{ date(node.expires_at) }}</span>
+              <span>最近检查 {{ date(node.checked_at) }}</span><span>授权到期 {{ date(node.expires_at) }}</span>
             </div>
-            <NAlert v-if="node.error" type="warning">{{ node.error }}</NAlert>
+            <NAlert v-if="node.error" type="warning">
+              {{ node.error }}
+            </NAlert>
 
             <div class="button-row">
               <NButton
@@ -201,25 +213,28 @@ onUnmounted(() => {
                   busy || !!checking.length || node.state === 'removing'
                 "
                 @click="check([node.id])"
-                >检查连接</NButton
               >
+                检查连接
+              </NButton>
               <NPopconfirm
                 :disabled="busy || !!checking.length"
                 positive-text="删除连接"
                 @positive-click="remove(node)"
-                ><template #trigger
-                  ><NButton
+              >
+                <template #trigger>
+                  <NButton
                     type="error"
                     secondary
                     :disabled="busy || !!checking.length"
-                    >{{
+                  >
+                    {{
                       node.state === "removing" ? "继续删除" : "删除连接"
-                    }}</NButton
-                  ></template
-                >删除
+                    }}
+                  </NButton>
+                </template>删除
                 {{ node.name }}
-                并撤销连接授权。无法连接时，请到目标服务器撤销对应授权。</NPopconfirm
-              >
+                并撤销连接授权。无法连接时，请到目标服务器撤销对应授权。
+              </NPopconfirm>
             </div>
           </article>
         </div>
@@ -234,9 +249,9 @@ onUnmounted(() => {
         :dirty="!!(form.name || form.url || form.api_key)"
         :submit-disabled="
           !form.name.trim() ||
-          !form.url.trim() ||
-          !form.api_key ||
-          !!checking.length
+            !form.url.trim() ||
+            !form.api_key ||
+            !!checking.length
         "
         submit-text="添加"
         @submit="create"
@@ -246,26 +261,29 @@ onUnmounted(() => {
         "
       >
         <div class="form-grid">
-          <NFormItem label="连接名称"
-            ><NInput
+          <NFormItem label="连接名称">
+            <NInput
               v-model:value="form.name"
               placeholder="例如：生产服务器"
               :maxlength="100"
-          /></NFormItem>
-          <NFormItem label="服务器 API 地址"
-            ><NInput
+            />
+          </NFormItem>
+          <NFormItem label="服务器 API 地址">
+            <NInput
               v-model:value="form.url"
               placeholder="https://server.example.com/api/v1"
               :maxlength="2048"
-          /></NFormItem>
-          <NFormItem class="full-width" label="API 密钥"
-            ><NInput
+            />
+          </NFormItem>
+          <NFormItem class="full-width" label="API 密钥">
+            <NInput
               v-model:value="form.api_key"
               type="password"
               show-password-on="click"
               autocomplete="off"
               :maxlength="193"
-          /></NFormItem>
+            />
+          </NFormItem>
         </div>
         <p class="section-note">
           填写目标服务器地址和专用 API 密钥，密钥至少需要读取权限。
@@ -276,19 +294,23 @@ onUnmounted(() => {
         <div class="record-list">
           <article v-for="node in removed" :key="node.id" class="record-card">
             <div class="toolbar">
-              <strong>{{ node.name }}</strong
-              ><NTag
+              <strong>{{ node.name }}</strong><NTag
                 :type="node.revocation === 'revoked' ? 'success' : 'warning'"
-                >{{
-                  node.revocation === "revoked" ? "授权已撤销" : "授权待核对"
-                }}</NTag
               >
+                {{
+                  node.revocation === "revoked" ? "授权已撤销" : "授权待核对"
+                }}
+              </NTag>
             </div>
-            <p class="record-address">{{ node.url }}</p>
-            <p class="muted">删除时间 {{ date(node.removed_at) }}</p>
-            <NAlert v-if="node.revocation === 'pending'" type="warning"
-              >请在目标服务器中撤销此连接授权。</NAlert
-            >
+            <p class="record-address">
+              {{ node.url }}
+            </p>
+            <p class="muted">
+              删除时间 {{ date(node.removed_at) }}
+            </p>
+            <NAlert v-if="node.revocation === 'pending'" type="warning">
+              请在目标服务器中撤销此连接授权。
+            </NAlert>
           </article>
         </div>
       </section>

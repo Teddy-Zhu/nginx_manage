@@ -54,23 +54,29 @@ onUnmounted(() => {
   <section class="panel page-stack">
     <div class="toolbar">
       <h3>面板登录失败记录</h3>
-      <NButton :loading="busy" :disabled="busy" @click="load">刷新记录</NButton>
+      <NButton :loading="busy" :disabled="busy" @click="load">
+        刷新记录
+      </NButton>
     </div>
-    <NAlert type="info"
-      >显示最近 20 条登录失败记录。启用防护规则后，可自动封禁多次登录失败的
-      IP。</NAlert
-    >
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
+    <NAlert type="info">
+      显示最近 20 条登录失败记录。启用防护规则后，可自动封禁多次登录失败的
+      IP。
+    </NAlert>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
     <template v-if="view">
       <div class="toolbar">
-        <NTag :type="view.available ? 'success' : 'warning'">{{
-          view.available ? "日志可读取" : "日志不可用"
-        }}</NTag>
-        <span class="muted"
-          >更新于 {{ new Date(view.at * 1000).toLocaleString() }}</span
-        >
+        <NTag :type="view.available ? 'success' : 'warning'">
+          {{
+            view.available ? "日志可读取" : "日志不可用"
+          }}
+        </NTag>
+        <span class="muted">更新于 {{ new Date(view.at * 1000).toLocaleString() }}</span>
       </div>
-      <NAlert v-if="view.reason" type="warning">{{ view.reason }}</NAlert>
+      <NAlert v-if="view.reason" type="warning">
+        {{ view.reason }}
+      </NAlert>
       <NDataTable
         v-if="view.available"
         :columns="columns"

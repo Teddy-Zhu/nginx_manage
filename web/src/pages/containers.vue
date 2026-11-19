@@ -449,16 +449,13 @@ onUnmounted(() => {
       </NAlert>
       <div class="stat-grid">
         <div class="stat-card">
-          <span class="stat-label">全部容器</span
-          ><strong>{{ view?.available ? list.length : "—" }}</strong>
+          <span class="stat-label">全部容器</span><strong>{{ view?.available ? list.length : "—" }}</strong>
         </div>
         <div class="stat-card">
-          <span class="stat-label">运行中</span
-          ><strong>{{ view?.available ? running : "—" }}</strong>
+          <span class="stat-label">运行中</span><strong>{{ view?.available ? running : "—" }}</strong>
         </div>
         <div class="stat-card">
-          <span class="stat-label">已停止 / 未启动</span
-          ><strong>{{ view?.available ? stopped : "—" }}</strong>
+          <span class="stat-label">已停止 / 未启动</span><strong>{{ view?.available ? stopped : "—" }}</strong>
         </div>
       </div>
       <section class="panel page-stack">
@@ -486,8 +483,7 @@ onUnmounted(() => {
         </div>
         <NAlert v-if="active" type="info" :bordered="false">
           <div class="toolbar">
-            <span>有操作正在处理，完成后可继续启停容器。</span
-            ><NButton
+            <span>有操作正在处理，完成后可继续启停容器。</span><NButton
               text
               type="primary"
               @click="inspectTask(active.id, '操作日志')"
@@ -515,28 +511,24 @@ onUnmounted(() => {
           :key="task.id"
           class="toolbar"
         >
-          <span
-            ><NTag
-              size="small"
-              :bordered="false"
-              :type="
-                task.state === 'succeeded'
-                  ? 'success'
-                  : task.state === 'failed'
-                    ? 'error'
-                    : 'info'
-              "
-              >{{ taskStates[task.state] || "状态待确认" }}</NTag
-            >
+          <span><NTag
+                  size="small"
+                  :bordered="false"
+                  :type="
+                    task.state === 'succeeded'
+                      ? 'success'
+                      : task.state === 'failed'
+                        ? 'error'
+                        : 'info'
+                  "
+                >{{ taskStates[task.state] || "状态待确认" }}</NTag>
             {{
               task.error ||
-              task.result?.software?.message ||
-              task.result?.runtime_reason ||
-              "容器操作"
+                task.result?.software?.message ||
+                task.result?.runtime_reason ||
+                "容器操作"
             }}<small class="section-note">
-              · {{ time(task.created_at) }}</small
-            ></span
-          ><NButton size="small" @click="inspectTask(task.id, '容器操作日志')">
+              · {{ time(task.created_at) }}</small></span><NButton size="small" @click="inspectTask(task.id, '容器操作日志')">
             查看日志
           </NButton>
         </div>
@@ -602,7 +594,9 @@ onUnmounted(() => {
             <dd>{{ health[detail.health] || "未设置" }}</dd>
             <dt>退出码</dt>
             <dd>{{ detail.exit_code }}</dd>
-            <dt v-if="detail.project">所属项目</dt>
+            <dt v-if="detail.project">
+              所属项目
+            </dt>
             <dd v-if="detail.project">
               {{ detail.project }} / {{ detail.service || "—" }}
             </dd>
@@ -618,9 +612,7 @@ onUnmounted(() => {
             :key="network.name"
             class="container-network"
           >
-            <strong>{{ network.name }}</strong
-            ><span>{{ network.address || "未分配地址" }}</span
-            ><span>网关：{{ network.gateway || "无" }}</span>
+            <strong>{{ network.name }}</strong><span>{{ network.address || "未分配地址" }}</span><span>网关：{{ network.gateway || "无" }}</span>
           </div>
         </SettingsSection>
         <SettingsSection title="数据挂载">
@@ -632,9 +624,7 @@ onUnmounted(() => {
             :key="index"
             class="container-mount"
           >
-            <span class="break-all"
-              >{{ mount.source }} → {{ mount.target }}</span
-            ><NTag size="small">
+            <span class="break-all">{{ mount.source }} → {{ mount.target }}</span><NTag size="small">
               {{ mount.read_only ? "只读" : "可读写" }}
             </NTag>
           </div>
@@ -666,14 +656,16 @@ onUnmounted(() => {
             }))
           "
         /><NButton :disabled="!logs && !logError" @click="paused = !paused">
-          {{ paused ? "继续更新" : "暂停更新" }} </NButton
-        ><NButton :disabled="!logs?.text" @click="copyLogs"> 复制日志 </NButton>
+          {{ paused ? "继续更新" : "暂停更新" }}
+        </NButton><NButton :disabled="!logs?.text" @click="copyLogs">
+          复制日志
+        </NButton>
       </div>
       <NAlert v-if="logError" type="error" :bordered="false">
-        {{ logError }} </NAlert
-      ><NAlert v-if="logs?.truncated" type="warning" :bordered="false">
-        日志较长，内容已截断。减少显示行数可查看最近的日志。 </NAlert
-      ><NSpin :show="!logs && !logError && !paused">
+        {{ logError }}
+      </NAlert><NAlert v-if="logs?.truncated" type="warning" :bordered="false">
+        日志较长，内容已截断。减少显示行数可查看最近的日志。
+      </NAlert><NSpin :show="!logs && !logError && !paused">
         <pre class="container-log">{{
           logs?.text ||
           (logError ? "无法读取日志" : logs ? "暂无日志" : "正在读取日志…")

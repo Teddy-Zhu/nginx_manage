@@ -22,13 +22,21 @@ withDefaults(
         <h3>{{ name }}</h3>
         <span class="muted">{{ category }}</span>
       </div>
-      <NTag :type="statusType" :bordered="false" size="small">{{
-        status
-      }}</NTag>
+      <NTag :type="statusType" :bordered="false" size="small">
+        {{
+          status
+        }}
+      </NTag>
     </div>
-    <p class="store-card-description">{{ description }}</p>
-    <div class="store-card-meta"><slot /></div>
-    <div class="store-card-actions"><slot name="actions" /></div>
+    <p class="store-card-description">
+      {{ description }}
+    </p>
+    <div class="store-card-meta">
+      <slot />
+    </div>
+    <div class="store-card-actions">
+      <slot name="actions" />
+    </div>
   </article>
 </template>
 <style scoped>

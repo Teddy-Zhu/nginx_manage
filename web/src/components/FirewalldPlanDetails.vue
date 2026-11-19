@@ -38,7 +38,9 @@ const columns: DataTableColumns<Entry> = [
 </script>
 
 <template>
-  <n-alert type="info" :bordered="false">{{ plan.reason }}</n-alert>
+  <n-alert type="info" :bordered="false">
+    {{ plan.reason }}
+  </n-alert>
   <n-alert
     v-for="warning in plan.warnings"
     :key="warning"
@@ -63,11 +65,17 @@ const columns: DataTableColumns<Entry> = [
     <dt>独立登记操作</dt>
     <dd>{{ plan.registration_operation_id }}</dd>
     <dt>运行配置基线</dt>
-    <dd class="digest">{{ plan.runtime_hash }}</dd>
+    <dd class="digest">
+      {{ plan.runtime_hash }}
+    </dd>
     <dt>永久配置基线</dt>
-    <dd class="digest">{{ plan.permanent_hash }}</dd>
+    <dd class="digest">
+      {{ plan.permanent_hash }}
+    </dd>
     <dt>完整程序摘要</dt>
-    <dd class="digest">{{ programHash }}</dd>
+    <dd class="digest">
+      {{ programHash }}
+    </dd>
   </dl>
   <n-data-table
     :columns="columns"

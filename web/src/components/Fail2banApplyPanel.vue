@@ -115,15 +115,19 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   <section class="surface page-stack">
     <div class="toolbar">
       <h4>应用与恢复</h4>
-      <NButton size="small" :loading="reading" @click="refresh"
-        >刷新任务</NButton
-      >
+      <NButton size="small" :loading="reading" @click="refresh">
+        刷新任务
+      </NButton>
     </div>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <NAlert v-if="pending" type="warning"
-      >上次提交结果待确认，重试将继续核对原任务。</NAlert
-    >
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
+    <NAlert v-if="pending" type="warning">
+      上次提交结果待确认，重试将继续核对原任务。
+    </NAlert>
     <p v-if="preview?.removed.length">
       将停用：{{ preview.removed.join("、") }}
     </p>
@@ -134,12 +138,13 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
           :loading="busy"
           :disabled="
             busy ||
-            active ||
-            !loaded ||
-            (!pending && (disabled || !preview?.can_apply))
+              active ||
+              !loaded ||
+              (!pending && (disabled || !preview?.can_apply))
           "
-          >{{ pending ? "重试原提交" : "应用已保存配置" }}</NButton
         >
+          {{ pending ? "重试原提交" : "应用已保存配置" }}
+        </NButton>
       </template>
       应用配置将更新本系统的防护规则，并停用本次移除的规则。确认继续？
     </NPopconfirm>
@@ -148,8 +153,12 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
     </p>
     <div v-for="task in tasks" :key="task.id" class="page-stack">
       <strong>{{ states[task.state] || task.state }} · {{ task.id }}</strong>
-      <p v-if="task.error" class="muted">{{ task.error }}</p>
+      <p v-if="task.error" class="muted">
+        {{ task.error }}
+      </p>
     </div>
-    <p v-if="loaded && !tasks.length" class="muted">暂无应用任务</p>
+    <p v-if="loaded && !tasks.length" class="muted">
+      暂无应用任务
+    </p>
   </section>
 </template>

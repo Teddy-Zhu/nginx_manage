@@ -212,46 +212,52 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
   <section class="panel page-stack">
     <div class="section-heading">
       <h3>防护服务</h3>
-      <NTag :type="running ? 'success' : 'default'">{{ status }}</NTag>
+      <NTag :type="running ? 'success' : 'default'">
+        {{ status }}
+      </NTag>
     </div>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="pending" type="warning"
-      >暂未确认操作结果，请继续查询。<NButton
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="pending" type="warning">
+      暂未确认操作结果，请继续查询。<NButton
         size="small"
         :loading="busy"
         @click="change()"
-        >确认操作进度</NButton
-      ></NAlert
-    >
+      >
+        确认操作进度
+      </NButton>
+    </NAlert>
     <div class="toolbar">
       <NPopconfirm
         v-if="running"
         :disabled="blocked"
         @positive-click="change('stop')"
-        ><template #trigger
-          ><NButton :disabled="blocked" :loading="busy"
-            >停止防护</NButton
-          ></template
-        >停止后，当前登录防护规则将暂停生效。确认停止？</NPopconfirm
       >
+        <template #trigger>
+          <NButton :disabled="blocked" :loading="busy">
+            停止防护
+          </NButton>
+        </template>停止后，当前登录防护规则将暂停生效。确认停止？
+      </NPopconfirm>
       <NButton
         v-else
         type="primary"
         :disabled="blocked || !canActivate"
         :loading="busy"
         @click="change('start')"
-        >启动防护</NButton
       >
+        启动防护
+      </NButton>
       <div class="inline-gap">
-        <span>开机启动</span
-        ><NSwitch
+        <span>开机启动</span><NSwitch
           :value="enabled"
           :disabled="
             blocked ||
-            (!enabled && !canActivate) ||
-            !['enabled', 'enabled-runtime', 'disabled'].includes(
-              service?.unit_file ?? '',
-            )
+              (!enabled && !canActivate) ||
+              !['enabled', 'enabled-runtime', 'disabled'].includes(
+                service?.unit_file ?? '',
+              )
           "
           :loading="busy"
           @update:value="change($event ? 'enable' : 'disable')"
@@ -266,20 +272,22 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
             emit('changed');
           }
         "
-        >刷新状态</NButton
       >
+        刷新状态
+      </NButton>
     </div>
     <p v-if="!canActivate && !running" class="muted">
       请联系管理员开启登录防护。
     </p>
-    <p v-if="active" class="muted">正在处理服务操作，请稍候。</p>
+    <p v-if="active" class="muted">
+      正在处理服务操作，请稍候。
+    </p>
     <p v-if="!writable && installed" class="muted">
       当前账户仅可查看防护状态。
     </p>
     <div v-for="item in tasks.slice(0, 5)" :key="item.id" class="record-card">
       <div class="record-heading">
-        <strong>{{ names[item.input.action] || "服务操作" }}</strong
-        ><NTag
+        <strong>{{ names[item.input.action] || "服务操作" }}</strong><NTag
           :type="
             item.state === 'succeeded'
               ? 'success'
@@ -287,8 +295,9 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
                 ? 'warning'
                 : 'info'
           "
-          >{{ states[item.state] || "正在处理" }}</NTag
-        ><TaskLogButton :task-id="item.id" />
+        >
+          {{ states[item.state] || "正在处理" }}
+        </NTag><TaskLogButton :task-id="item.id" />
       </div>
       <p class="muted">
         {{ new Date(item.created_at * 1000).toLocaleString() }}

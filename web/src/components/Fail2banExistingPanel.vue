@@ -444,102 +444,118 @@ useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
           loadResources();
           refreshTasks();
         "
-        >刷新</NButton
       >
+        刷新
+      </NButton>
     </div>
-    <NAlert v-if="error" type="error">{{ error }}</NAlert>
-    <NAlert v-if="historyError" type="error"
-      >任务记录读取失败：{{ historyError }}</NAlert
-    >
-    <NAlert v-if="notice" type="info">{{ notice }}</NAlert>
-    <p v-if="!resources.length" class="muted">暂无已连接的防护规则。</p>
+    <NAlert v-if="error" type="error">
+      {{ error }}
+    </NAlert>
+    <NAlert v-if="historyError" type="error">
+      任务记录读取失败：{{ historyError }}
+    </NAlert>
+    <NAlert v-if="notice" type="info">
+      {{ notice }}
+    </NAlert>
+    <p v-if="!resources.length" class="muted">
+      暂无已连接的防护规则。
+    </p>
     <template v-else>
-      <NFormItem label="防护规则"
-        ><NSelect
+      <NFormItem label="防护规则">
+        <NSelect
           v-model:value="selected"
           :options="
             resources.map((item) => ({ label: item.name, value: item.name }))
           "
           :disabled="busy || !!pending || !!pendingCancel"
           :loading="detailReading"
-      /></NFormItem>
+        />
+      </NFormItem>
       <NButton
         :disabled="!selected || busy || active || !!pending"
         :loading="detailReading"
         @click="loadResource(selected)"
-        >重新加载设置</NButton
       >
+        重新加载设置
+      </NButton>
       <template v-if="resource">
         <p class="muted">
           SSH ·
           {{ logs[resource.profile.log_source] ?? resource.profile.log_source }}
           · 端口 {{ resource.profile.ports.join("、") }}
         </p>
-        <NAlert type="info"
-          >下列参数来自已保存记录；运行状态以预览和应用回执为准。</NAlert
-        >
+        <NAlert type="info">
+          下列参数来自已保存记录；运行状态以预览和应用回执为准。
+        </NAlert>
         <div class="actions">
-          <NFormItem label="启用此 jail"
-            ><NSwitch v-model:value="enabled" :disabled="editingDisabled"
-          /></NFormItem>
-          <NFormItem label="封禁时间（秒，-1 为永久）"
-            ><NInputNumber
+          <NFormItem label="启用此 jail">
+            <NSwitch v-model:value="enabled" :disabled="editingDisabled" />
+          </NFormItem>
+          <NFormItem label="封禁时间（秒，-1 为永久）">
+            <NInputNumber
               v-model:value="banTime"
               :min="-1"
               :max="31536000"
               :precision="0"
               :disabled="editingDisabled"
-          /></NFormItem>
-          <NFormItem label="统计窗口（秒）"
-            ><NInputNumber
+            />
+          </NFormItem>
+          <NFormItem label="统计窗口（秒）">
+            <NInputNumber
               v-model:value="findTime"
               :min="1"
               :max="86400"
               :precision="0"
               :disabled="editingDisabled"
-          /></NFormItem>
-          <NFormItem label="重试阈值"
-            ><NInputNumber
+            />
+          </NFormItem>
+          <NFormItem label="重试阈值">
+            <NInputNumber
               v-model:value="maxRetry"
               :min="1"
               :max="1000"
               :precision="0"
               :disabled="editingDisabled"
-          /></NFormItem>
+            />
+          </NFormItem>
         </div>
-        <NFormItem label="白名单 IP / 网段"
-          ><ValueListInput
+        <NFormItem label="白名单 IP / 网段">
+          <ValueListInput
             v-model:value="ignoreIPs"
             :max="64"
             item-label="白名单地址"
             placeholder="192.0.2.1 或 192.0.2.0/24"
             :maxlength="64"
             :disabled="editingDisabled"
-        /></NFormItem>
+          />
+        </NFormItem>
         <div class="actions">
           <NButton
             :loading="busy"
             :disabled="editingDisabled || !loaded || !policy || detailReading"
             @click="submit('preview')"
-            >预览参数变更</NButton
           >
+            预览参数变更
+          </NButton>
         </div>
       </template>
     </template>
-    <NAlert v-if="pending" type="warning"
-      >提交结果未确认，请重试同一请求。<NButton
+    <NAlert v-if="pending" type="warning">
+      提交结果未确认，请重试同一请求。<NButton
         :disabled="busy || !canWrite"
         @click="retrySubmission"
-        >重试提交</NButton
-      ></NAlert
-    >
-    <NAlert v-if="pendingCancel" type="warning"
-      >取消申请的提交结果未确认。<NButton
+      >
+        重试提交
+      </NButton>
+    </NAlert>
+    <NAlert v-if="pendingCancel" type="warning">
+      取消申请的提交结果未确认。<NButton
         :disabled="busy || !canWrite"
         @click="retryCancellation"
-        >重试取消申请</NButton
-      ></NAlert
-    >
+      >
+        重试取消申请
+      </NButton>
+    </NAlert>
     <template v-if="plan && viewed">
       <h4>
         {{ plan.name }} ·
@@ -586,41 +602,46 @@ useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
           </tbody>
         </table>
       </div>
-      <NAlert v-if="plan.stop_confirmation" type="warning"
-        >停用会结束此 SSH jail
-        的当前封禁保护；封禁集合变化后须重新预览。</NAlert
-      >
+      <NAlert v-if="plan.stop_confirmation" type="warning">
+        停用会结束此 SSH jail
+        的当前封禁保护；封禁集合变化后须重新预览。
+      </NAlert>
       <p v-else class="muted">
         仅调整此 jail。继续启用时，应用须核对原未到期封禁仍被保留。
       </p>
       <template
         v-if="viewed.input.action === 'preview' && viewed.state === 'succeeded'"
       >
-        <p class="muted">预览有效期至 {{ time(plan.at + 300) }}。</p>
+        <p class="muted">
+          预览有效期至 {{ time(plan.at + 300) }}。
+        </p>
         <NButton
           v-if="!ready"
           :disabled="
             editingDisabled ||
-            resource?.adoption_id !== plan.adoption_id ||
-            now - plan.at * 1000 > 300000
+              resource?.adoption_id !== plan.adoption_id ||
+              now - plan.at * 1000 > 300000
           "
           @click="usePreview(viewed)"
-          >载入此预览的期望参数</NButton
         >
+          载入此预览的期望参数
+        </NButton>
         <NCheckbox
           v-if="plan.stop_confirmation && ready"
           v-model:checked="confirmStop"
-          >确认停用此 SSH jail 并结束其当前保护</NCheckbox
         >
-        <NPopconfirm @positive-click="submit('apply')"
-          ><template #trigger
-            ><NButton
+          确认停用此 SSH jail 并结束其当前保护
+        </NCheckbox>
+        <NPopconfirm @positive-click="submit('apply')">
+          <template #trigger>
+            <NButton
               type="primary"
               :disabled="!ready || (plan.stop_confirmation && !confirmStop)"
-              >应用预览参数</NButton
-            ></template
-          >确认应用此 jail 的参数变更？</NPopconfirm
-        >
+            >
+              应用预览参数
+            </NButton>
+          </template>确认应用此 jail 的参数变更？
+        </NPopconfirm>
       </template>
     </template>
     <Fail2banAddressPanel
@@ -636,49 +657,54 @@ useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
       <div class="actions">
         <strong>{{
           task.result?.plan?.name ??
-          resources.find((item) => item.adoption_id === task.input.adoption_id)
-            ?.name ??
-          "原接管登记"
+            resources.find((item) => item.adoption_id === task.input.adoption_id)
+              ?.name ??
+            "原接管登记"
         }}</strong>
-        <span
-          >{{ task.input.action === "preview" ? "预览" : "应用" }} ·
-          {{ time(task.created_at) }}</span
-        >
-        <NTag>{{
-          task.stage === "cancelled"
-            ? "已取消"
-            : (stageNames[task.stage] ?? stateNames[task.state] ?? "等待核对")
-        }}</NTag>
+        <span>{{ task.input.action === "preview" ? "预览" : "应用" }} ·
+          {{ time(task.created_at) }}</span>
+        <NTag>
+          {{
+            task.stage === "cancelled"
+              ? "已取消"
+              : (stageNames[task.stage] ?? stateNames[task.state] ?? "等待核对")
+          }}
+        </NTag>
         <NButton
           v-if="task.result?.plan"
           size="small"
           @click="inspectTask(task)"
-          >查看参数</NButton
         >
+          查看参数
+        </NButton>
         <NPopconfirm
           v-if="
             activeStates.has(task.state) && task.stage !== 'restore_isolated'
           "
           @positive-click="cancel(task.id)"
-          ><template #trigger
-            ><NButton
+        >
+          <template #trigger>
+            <NButton
               size="small"
               :disabled="
                 !canWrite ||
-                busy ||
-                !!pending ||
-                !!pendingCancel ||
-                (task.cancel_requested && !task.cancel_error)
+                  busy ||
+                  !!pending ||
+                  !!pendingCancel ||
+                  (task.cancel_requested && !task.cancel_error)
               "
-              >申请取消</NButton
-            ></template
-          >取消结果须核对原运行状态，已完成的变更需另建恢复计划。</NPopconfirm
-        >
+            >
+              申请取消
+            </NButton>
+          </template>取消结果须核对原运行状态，已完成的变更需另建恢复计划。
+        </NPopconfirm>
       </div>
-      <NAlert v-if="task.error" type="error">{{ task.error }}</NAlert>
-      <NAlert v-if="task.cancel_error" type="warning"
-        >取消申请未完成：{{ task.cancel_error }}</NAlert
-      >
+      <NAlert v-if="task.error" type="error">
+        {{ task.error }}
+      </NAlert>
+      <NAlert v-if="task.cancel_error" type="warning">
+        取消申请未完成：{{ task.cancel_error }}
+      </NAlert>
       <p
         v-else-if="task.cancel_requested && task.stage !== 'cancelled'"
         class="muted"

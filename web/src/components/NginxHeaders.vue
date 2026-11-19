@@ -25,15 +25,21 @@ function update() {
 function remove(index: number) { rows.value.splice(index, 1); update(); }
 </script>
 <template>
-  <NAlert v-if="error" type="warning">{{ error }}</NAlert>
+  <NAlert v-if="error" type="warning">
+    {{ error }}
+  </NAlert>
   <div v-else class="field-list">
     <div v-for="(row, index) in rows" :key="index" class="header-row field-row" :class="{ response }">
       <label class="field-label header-name">名称<NInput v-model:value="row.name" :placeholder="response ? '例如 X-Content-Type-Options' : '例如 X-Forwarded-For'" :maxlength="64" :disabled="disabled" @update:value="update" /></label>
       <label class="field-label header-value">值<NInput v-model:value="row.value" :placeholder="`${response ? '响应头' : '请求头'}值，可使用 Nginx 变量`" :maxlength="2048" :disabled="disabled" @update:value="update" /></label>
       <label v-if="response" class="field-label always">所有响应<span class="field-toggle"><NSwitch v-model:value="row.always" :disabled="disabled" @update:value="update" /></span></label>
-      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除${response ? '响应头' : '请求头'} ${index + 1}`" @click="remove(index)">移除</NButton>
+      <NButton attr-type="button" :disabled="disabled" :aria-label="`移除${response ? '响应头' : '请求头'} ${index + 1}`" @click="remove(index)">
+        移除
+      </NButton>
     </div>
-    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ name: '', value: '', always: false })">＋ 添加{{ response ? '响应头' : '请求头' }}</NButton>
+    <NButton class="field-add" attr-type="button" dashed :disabled="disabled || rows.length >= 128" @click="rows.push({ name: '', value: '', always: false })">
+      ＋ 添加{{ response ? '响应头' : '请求头' }}
+    </NButton>
   </div>
 </template>
 <style scoped>

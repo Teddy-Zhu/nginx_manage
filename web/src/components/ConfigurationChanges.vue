@@ -101,45 +101,49 @@ function resourceName(id: string) {
     :close-on-esc="!busy"
   >
     <div class="comparison-selectors">
-      <n-form-item label="比较基准"
-        ><n-select
+      <n-form-item label="比较基准">
+        <n-select
           v-model:value="base"
           :options="options"
-          :disabled="busy" /></n-form-item
-      ><n-button type="primary" :loading="busy" @click="compare">比较</n-button>
+          :disabled="busy"
+        />
+      </n-form-item><n-button type="primary" :loading="busy" @click="compare">
+        比较
+      </n-button>
     </div>
-    <p class="muted">与当前编辑的配置内容比较。</p>
+    <p class="muted">
+      与当前编辑的配置内容比较。
+    </p>
     <template v-if="difference">
       <n-alert
         v-if="difference.diagnostics.length"
         type="warning"
         :bordered="false"
         style="margin-bottom: 16px"
-        >目标原文存在
-        {{ difference.diagnostics.length }}
-        项解析或映射诊断。差异查看不会保存或应用配置。</n-alert
       >
+        目标原文存在
+        {{ difference.diagnostics.length }}
+        项解析或映射诊断。差异查看不会保存或应用配置。
+      </n-alert>
       <n-select
         v-if="fileOptions.length"
         v-model:value="selected"
         :options="fileOptions"
         style="margin-bottom: 16px"
       />
-      <template v-if="file"
-        ><p v-if="file.before_path !== file.after_path" class="muted">
+      <template v-if="file">
+        <p v-if="file.before_path !== file.after_path" class="muted">
           {{ file.before_path || "不存在" }} → {{ file.after_path || "不存在" }}
         </p>
         <div v-if="file.affected_resources.length" class="impact">
-          <span class="muted">可能受影响：</span
-          ><n-tag
+          <span class="muted">可能受影响：</span><n-tag
             v-for="id in file.affected_resources"
             :key="id"
             size="small"
             :bordered="false"
-            >{{ resourceName(id) }}</n-tag
-          ><span v-if="file.affected_resources_truncated" class="muted"
-            >共 {{ file.affected_resource_count }} 个资源，仅展示前 100 个</span
           >
+            {{ resourceName(id) }}
+          </n-tag><span v-if="file.affected_resources_truncated" class="muted">共 {{ file.affected_resource_count }} 个资源，仅展示前 100 个</span>
         </div>
         <source-diff
           :before="file.before_content"
@@ -148,7 +152,8 @@ function resourceName(id: string) {
             options.find((option) => option.value === base)?.label || '原配置'
           "
           after-label="当前编辑内容"
-      /></template>
+        />
+      </template>
       <n-empty v-else description="配置内容没有变化" />
     </template>
   </n-modal>

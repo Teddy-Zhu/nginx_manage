@@ -155,61 +155,65 @@ onMounted(load);
       清理不再使用的旧配置文件和证书副本，保留当前运行所需的文件。未完成的清理可以继续执行。
     </NAlert>
     <div class="toolbar">
-      <NButton :loading="busy" @click="load">刷新状态</NButton>
+      <NButton :loading="busy" @click="load">
+        刷新状态
+      </NButton>
     </div>
     <section class="surface">
       <div class="grid-2">
-        <NFormItem label="材料类别"
-          ><NSelect
+        <NFormItem label="材料类别">
+          <NSelect
             v-model:value="kind"
             :options="options"
             :disabled="busy || !!savedPending"
-        /></NFormItem>
-        <NFormItem label="截止时间"
-          ><input
+          />
+        </NFormItem>
+        <NFormItem label="截止时间">
+          <input
             v-model="before"
             type="datetime-local"
             :disabled="busy || !!savedPending"
-        /></NFormItem>
+          />
+        </NFormItem>
         <NFormItem
           :label="
             kind === 'certificate'
               ? '每张证书至少保留副本数'
               : '至少保留发布目录数'
           "
-          ><NInputNumber
+        >
+          <NInputNumber
             v-model:value="keep"
             :min="2"
             :max="32"
             :precision="0"
             :clearable="false"
             :disabled="busy || !!savedPending"
-        /></NFormItem>
+          />
+        </NFormItem>
       </div>
-      <NButton :loading="busy" :disabled="!!savedPending" @click="inspect"
-        >查看可清理文件</NButton
-      >
+      <NButton :loading="busy" :disabled="!!savedPending" @click="inspect">
+        查看可清理文件
+      </NButton>
     </section>
     <NAlert v-if="pending" type="warning" :bordered="false">
       上次清理的结果尚未确认，请继续核对。
-      <NButton :loading="busy" :disabled="busy" @click="execute()"
-        >核对并继续清理</NButton
-      >
+      <NButton :loading="busy" :disabled="busy" @click="execute()">
+        核对并继续清理
+      </NButton>
     </NAlert>
     <section v-if="preview" class="surface page-stack">
       <div class="toolbar">
-        <span
-          >{{ preview.targets.length }} 个目录，{{ preview.entries }} 个条目，{{
-            (preview.bytes / 1024).toFixed(1)
-          }}
-          KiB{{ preview.more ? "；还有后续批次" : "" }}</span
-        >
+        <span>{{ preview.targets.length }} 个目录，{{ preview.entries }} 个条目，{{
+          (preview.bytes / 1024).toFixed(1)
+        }}
+          KiB{{ preview.more ? "；还有后续批次" : "" }}</span>
         <NPopconfirm v-if="!pending" @positive-click="() => execute()">
-          <template #trigger
-            ><NButton type="error" :disabled="busy || !preview.targets.length"
-              >清理本批文件</NButton
-            ></template
-          >
+          <template #trigger>
+            <NButton type="error" :disabled="busy || !preview.targets.length">
+              清理本批文件
+            </NButton>
+          </template>
           确认清理所选旧文件？清理后无法恢复。
         </NPopconfirm>
       </div>
@@ -223,9 +227,11 @@ onMounted(load);
         :bordered="false"
         :scroll-x="1000"
       />
-      <NAlert v-if="savedPending" type="warning" :bordered="false">{{
-        savedPending.error || "原清理操作尚未结束"
-      }}</NAlert>
+      <NAlert v-if="savedPending" type="warning" :bordered="false">
+        {{
+          savedPending.error || "原清理操作尚未结束"
+        }}
+      </NAlert>
     </section>
   </div>
 </template>

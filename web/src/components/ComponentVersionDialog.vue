@@ -254,13 +254,10 @@ onBeforeUnmount(() => controller?.abort());
       </NFormItem>
       <template v-else>
         <div class="version-toolbar">
-          <span v-if="catalog?.current" class="muted"
-            >{{ catalog.current.image_tag ? "当前镜像标签" : "当前版本" }}
+          <span v-if="catalog?.current" class="muted">{{ catalog.current.image_tag ? "当前镜像标签" : "当前版本" }}
             {{ catalog.current.version
             }}<template v-if="catalog.current.software_version">
-              · {{ name }} {{ catalog.current.software_version }}</template
-            ></span
-          ><NSelect
+              · {{ name }} {{ catalog.current.software_version }}</template></span><NSelect
             :value="channel"
             :options="channels"
             :disabled="reading || busy"
@@ -322,31 +319,30 @@ onBeforeUnmount(() => controller?.abort());
                     size="small"
                     type="success"
                   >
-                    当前 </NTag
-                  ><NTag
+                    当前
+                  </NTag><NTag
                     v-else-if="page === 1 && item.id === recommended"
                     size="small"
                     type="info"
                   >
-                    推荐 </NTag
-                  ><NTag v-if="item.id === catalog?.previous?.id" size="small">
-                    上次安装 </NTag
-                  ><NTag v-if="appId === 'nginx'" size="small">
+                    推荐
+                  </NTag><NTag v-if="item.id === catalog?.previous?.id" size="small">
+                    上次安装
+                  </NTag><NTag v-if="appId === 'nginx'" size="small">
                     {{
                       item.id === "bundled-nginx"
                         ? "安装包镜像"
                         : "在线发布镜像"
-                    }} </NTag
-                  ><NTag v-else-if="item.image_tag" size="small">
-                    镜像标签 </NTag
-                  ><span
+                    }}
+                  </NTag><NTag v-else-if="item.image_tag" size="small">
+                    镜像标签
+                  </NTag><span
                     v-if="
                       item.id !== 'bundled-nginx' &&
-                      (appId === 'nginx' || item.software_version)
+                        (appId === 'nginx' || item.software_version)
                     "
                     class="muted"
-                    >组件 {{ item.version }}</span
-                  ><span v-if="item.published_at" class="muted">{{
+                  >组件 {{ item.version }}</span><span v-if="item.published_at" class="muted">{{
                     new Date(item.published_at * 1000).toLocaleDateString()
                   }}</span>
                 </div>
@@ -357,8 +353,8 @@ onBeforeUnmount(() => controller?.abort());
                   {{ item.unavailable || item.notes }}
                 </p>
               </div>
-            </div> </NRadioGroup
-          ><NEmpty v-else-if="!reading" description="此通道暂无可用版本" />
+            </div>
+          </NRadioGroup><NEmpty v-else-if="!reading" description="此通道暂无可用版本" />
           <div v-else class="version-placeholder" />
         </NSpin>
         <div v-if="page > 1 || catalog?.has_more" class="version-pagination">
@@ -366,9 +362,8 @@ onBeforeUnmount(() => controller?.abort());
             :disabled="reading || busy || page <= 1"
             @click="changePage(page - 1)"
           >
-            上一页 </NButton
-          ><span class="muted">第 {{ page }} 页</span
-          ><NButton
+            上一页
+          </NButton><span class="muted">第 {{ page }} 页</span><NButton
             :disabled="reading || busy || !catalog?.has_more"
             @click="changePage(page + 1)"
           >

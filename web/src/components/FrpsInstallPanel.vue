@@ -314,9 +314,7 @@ onMounted(load);
         <NTag :type="display.tone" :bordered="false">
           {{ display.label }}
         </NTag>
-        <span v-if="status?.stats?.version" class="muted"
-          >v{{ status.stats.version }}</span
-        >
+        <span v-if="status?.stats?.version" class="muted">v{{ status.stats.version }}</span>
       </div>
       <div v-if="status?.installed" class="button-row">
         <NButton
@@ -372,12 +370,10 @@ onMounted(load);
         <div>
           <dt>网站转发</dt>
           <dd class="frps-website-status">
-            <span v-for="website in websites" :key="website.name"
-              >{{ website.name
-              }}<span :class="{ muted: !website.port }">{{
-                website.port ? `端口 ${website.port}` : "未开启"
-              }}</span></span
-            >
+            <span v-for="website in websites" :key="website.name">{{ website.name
+            }}<span :class="{ muted: !website.port }">{{
+              website.port ? `端口 ${website.port}` : "未开启"
+            }}</span></span>
           </dd>
         </div>
         <div>
@@ -389,8 +385,8 @@ onMounted(load);
         客户端需填写相同的访问密钥，连接与映射端口需在<RouterLink
           to="/firewall"
         >
-          防火墙 </RouterLink
-        >中放行。
+          防火墙
+        </RouterLink>中放行。
       </div>
     </template>
     <NEmpty
@@ -399,7 +395,9 @@ onMounted(load);
       description="尚未安装 FRP 服务端"
     >
       <template #extra>
-        <p class="muted">安装后可连接其他设备，使用端口映射和网站转发。</p>
+        <p class="muted">
+          安装后可连接其他设备，使用端口映射和网站转发。
+        </p>
         <NButton
           type="primary"
           :disabled="!permitted || processing || status.state === 'unknown'"
@@ -541,8 +539,12 @@ onMounted(load);
                 :disabled="processing || !permitted"
                 @update:value="unrestricted = $event === 'all'"
               >
-                <NRadioButton value="selected"> 指定端口 </NRadioButton>
-                <NRadioButton value="all"> 不限制 </NRadioButton>
+                <NRadioButton value="selected">
+                  指定端口
+                </NRadioButton>
+                <NRadioButton value="all">
+                  不限制
+                </NRadioButton>
               </NRadioGroup>
             </NFormItem>
             <template v-if="!unrestricted">
@@ -619,10 +621,8 @@ onMounted(load);
                   placeholder="例如 example.com"
                   :disabled="processing || !permitted"
                 />
-                <span class="frps-field-hint"
-                  >设置后，客户端可使用 app.example.com
-                  等子域名。域名需解析到此服务器。</span
-                >
+                <span class="frps-field-hint">设置后，客户端可使用 app.example.com
+                  等子域名。域名需解析到此服务器。</span>
               </div>
             </NFormItem>
             <p v-if="httpEnabled || httpsEnabled" class="frps-field-hint">

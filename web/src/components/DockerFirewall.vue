@@ -74,7 +74,9 @@ const capabilities: DataTableColumns<Capability> = [
       <dt>授权状态</dt><dd>{{ registrationName(value.registration.registration.state) }}</dd>
       <template v-if="value.registration.backend">
         <dt>授权后端</dt><dd>{{ value.registration.backend }}</dd>
-        <dt>授权实例摘要</dt><dd class="digest">{{ value.registration.engine_hash }}</dd>
+        <dt>授权实例摘要</dt><dd class="digest">
+          {{ value.registration.engine_hash }}
+        </dd>
         <dt>原宿主机登记</dt><dd>{{ value.registration.parent_operation_id }}</dd>
       </template>
     </dl>

@@ -20,8 +20,10 @@ const states: Record<string, string> = {
       保留 {{ info.preserved_jails }} 个，替换
       {{ info.replaced_jails }} 个，目标共 {{ info.total_jails }} 个。
     </p>
-    <NAlert v-for="warning in info.warnings" :key="warning" type="warning">{{
-      warning
-    }}</NAlert>
+    <NAlert v-for="warning in info.warnings" :key="warning" type="warning">
+      {{
+        warning
+      }}
+    </NAlert>
   </div>
 </template>
