@@ -103,11 +103,10 @@ const capabilities: DataTableColumns<Capability> = [
       </dl>
       <h4>主机端口映射</h4>
       <p class="muted">
-        0.0.0.0 和 :: 表示通配绑定。容器暴露端口、主机映射和转发保护需分别核对；
-        此清单不证明端口可达或已经受保护。
+        0.0.0.0 和 :: 表示绑定所有地址。
       </p>
       <p v-if="value.runtime.truncated" class="muted">
-        仅展示前 128 项，全部映射均参与数量及前后报告核对。
+        仅显示前 128 项。
       </p>
       <n-data-table
         :columns="ports"

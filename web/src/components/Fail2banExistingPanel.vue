@@ -485,7 +485,7 @@ useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
           · 端口 {{ resource.profile.ports.join("、") }}
         </p>
         <NAlert type="info">
-          下列参数来自已保存记录；运行状态以预览和应用回执为准。
+          已保存的规则设置
         </NAlert>
         <div class="actions">
           <NFormItem label="启用此 jail">
@@ -713,8 +713,8 @@ useLiveRefresh(api, ["tasks"], refreshTasks, () => reading.value);
           task.cancel_pending
             ? "取消申请等待提交核对"
             : task.result?.cancel_requested
-              ? "取消申请已受理，以最终运行回执为准"
-              : "取消申请已核对，请查看任务结果"
+              ? "已申请取消，等待处理"
+              : "取消申请已处理，请查看任务结果"
         }}
       </p>
     </div>

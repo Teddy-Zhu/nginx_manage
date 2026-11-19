@@ -152,9 +152,6 @@ onUnmounted(() => {
         <div class="page-heading">
           <div>
             <h1>{{ title }}</h1>
-            <p v-if="route.meta.subtitle">
-              {{ route.meta.subtitle }}
-            </p>
           </div>
           <div id="page-heading-actions" />
         </div>
@@ -174,7 +171,7 @@ onUnmounted(() => {
           </n-button>
         </n-alert>
         <NAlert v-if="liveDisconnected" type="warning" class="live-warning">
-          实时状态更新暂时中断，正在重新连接。您可以手动刷新查看最新状态。
+          实时更新已断开，正在重连。
         </NAlert>
         <slot />
       </main>

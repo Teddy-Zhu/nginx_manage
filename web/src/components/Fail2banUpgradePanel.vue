@@ -328,9 +328,6 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
         刷新任务
       </NButton>
     </div>
-    <p>
-      选择已准备的更新版本，完成检查和准备后确认升级。仅支持正在运行的独立受管实例。
-    </p>
     <NAlert v-if="!moduleEnabled" type="warning">
       请先开启登录防护。
     </NAlert>
@@ -375,7 +372,7 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
       :loading="busy"
       @click="() => submit()"
     >
-      核对并重试原请求
+      重试更新
     </NButton>
     <section v-if="plan" class="surface page-stack">
       <h4>{{ plan.source_version }} → {{ plan.candidate_version }}</h4>

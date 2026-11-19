@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "消息通知",
-    "subtitle": "设置通知渠道和接收事件",
     "nav": true,
     "order": 52,
     "symbol": "♧",
@@ -539,7 +538,7 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       :scroll-x="1100"
     />
     <p class="muted">
-      目标与凭据仅显示配置状态；发送测试会产生真实投递。修改或停用渠道会取消其待投递项，历史记录保留。
+      修改或停用渠道会取消待投递通知。测试通知会发送到配置的接收目标。
     </p>
   </section>
   <section class="surface">
@@ -577,7 +576,7 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
       </n-button>
     </div>
     <p class="muted">
-      发送失败后会自动重试，超过重试次数或有效期后停止。网络异常时，通知可能重复送达。
+      投递失败后会自动重试，直到超过重试次数或有效期。
     </p>
   </section>
   <section class="surface">
@@ -603,9 +602,6 @@ useLiveRefresh(api, ["notifications"], fetchData, () => busy.value);
         下一页
       </n-button>
     </div>
-    <p class="muted">
-      任务故障按资源和小时合并。证书到期阈值同时参考实际寿命与已保存续期时间；数据目录空间告警独立于宿主机监控。
-    </p>
   </section>
   <FormDialog
     :show="channelModal"

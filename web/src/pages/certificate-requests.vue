@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "申请与续期",
-    "subtitle": "申请、续期与签发记录",
     "nav": false,
     "parent": "/certificates"
   }
@@ -406,9 +405,6 @@ useLiveRefresh(
     <div class="cert-heading">
       <div>
         <h2>申请与续期</h2>
-        <p class="muted">
-          申请免费证书，并设置到期前自动续期。
-        </p>
       </div>
       <div class="cert-actions">
         <n-button :loading="busy" @click="load">
@@ -427,9 +423,6 @@ useLiveRefresh(
       class="surface cert-section"
     >
       <h2>先添加申请账户</h2>
-      <p class="muted">
-        填写联系邮箱并注册账户后，即可申请证书。已有证书可以直接导入。
-      </p>
       <div class="cert-actions">
         <router-link
           :to="{ path: '/acme', query: { tab: 'accounts', from: 'request' } }"
@@ -448,7 +441,7 @@ useLiveRefresh(
     >
       <h2>申请准备已就绪</h2>
       <p class="muted">
-        填写域名并选择验证方式后提交申请。通配域名需要 DNS 授权。
+        通配域名需要 DNS 授权。
       </p>
       <div v-if="!credentials.length" class="cert-actions">
         <router-link
@@ -470,9 +463,6 @@ useLiveRefresh(
       @submit="create"
       @cancel="close"
     >
-      <p class="muted">
-        提交后开始验证域名，可在申请记录中查看结果。
-      </p>
       <div class="cert-form-grid">
         <n-form-item label="证书名称" required>
           <n-input
@@ -730,7 +720,7 @@ useLiveRefresh(
             {{ order.last_error }}
           </p>
           <p v-if="order.terminal" class="muted">
-            本次验证已结束，未完成清理时请继续原申请。
+            验证已结束。若验证记录尚未清理，请继续处理此申请。
           </p>
           <p v-if="order.certificate_version_id" class="muted">
             证书已保存，可前往“我的证书”查看。

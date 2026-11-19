@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "软件商店",
-    "subtitle": "安装和管理所需软件",
     "nav": true,
     "order": 20,
     "symbol": "◇",
@@ -192,7 +191,7 @@ useLiveRefresh(api, ["tasks"], loadTasks, () => readingTasks.value);
       {{ error || overview?.component_error }}
     </NAlert>
     <NAlert v-if="active" type="info" :bordered="false">
-      软件操作正在处理，可在“操作记录”中查看进度和日志。
+      有软件操作正在执行。
     </NAlert>
     <section class="store-workspace">
       <div class="store-filters">

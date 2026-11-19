@@ -84,7 +84,7 @@ const columns: DataTableColumns<Entry> = [
     :scroll-x="850"
   />
   <p v-if="plan.truncated" class="muted">
-    仅展示前 128 条；规则计数和程序摘要覆盖完整配置。
+    仅显示前 128 条规则。
   </p>
 </template>
 

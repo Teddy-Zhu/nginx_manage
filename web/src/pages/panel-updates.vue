@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "系统更新",
-    "subtitle": "检查版本与更新记录",
     "order": 30,
     "localOnly": true,
     "parent": "/settings"
@@ -212,10 +211,10 @@ onMounted(() => load(true));
         />
       </div>
       <p v-if="channel === 'beta'" class="muted">
-        Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
+        Beta 版本可能不稳定。
       </p>
       <NAlert v-if="updating && liveDisconnected" type="info">
-        面板正在重启或连接暂时中断，恢复后将继续显示更新结果。
+        更新期间连接已断开，正在重连。
       </NAlert>
       <NAlert v-if="checkError" type="error">
         {{ checkError }}

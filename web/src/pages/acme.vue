@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "申请设置",
-    "subtitle": "管理签发账户和 DNS 验证信息",
     "nav": false,
     "parent": "/certificates"
   }
@@ -365,9 +364,6 @@ useLiveRefresh(
     <div class="cert-heading">
       <div>
         <h2>申请设置</h2>
-        <p class="muted">
-          申请账户用于接收证书通知，DNS 授权用于自动验证域名。
-        </p>
       </div>
       <n-button :loading="busy" @click="load">
         刷新
@@ -521,7 +517,7 @@ useLiveRefresh(
       </n-tab-pane>
       <n-tab-pane name="credentials" tab="DNS 授权">
         <n-alert type="info" :bordered="false">
-          授权用于自动添加和清理域名验证记录，不修改网站解析。密钥保存后不会再次显示。
+          密钥保存后不会再次显示。
         </n-alert>
         <div class="toolbar" style="margin-top: 20px">
           <span class="muted">{{ credentials.length }} 组授权</span><n-button

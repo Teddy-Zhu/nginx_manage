@@ -250,7 +250,6 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
       <NAlert v-if="!moduleEnabled" type="warning">
         请先开启登录防护。
       </NAlert>
-      <p>自动识别服务器环境，检查并安装所需的运行依赖。</p>
       <NCheckbox v-model:checked="refreshIndex" :disabled="!canSubmit">
         更新软件列表
       </NCheckbox>
@@ -265,7 +264,7 @@ useLiveRefresh(api, ["tasks"], refresh, () => reading.value);
               更新软件列表并检查依赖
             </NButton>
           </template>
-          将使用宿主机现有仓库配置刷新索引，可能运行已有包管理器钩子。本次不安装软件包。
+          刷新系统软件列表并检查依赖？此步骤不会安装软件。
         </NPopconfirm>
         <NButton v-else :disabled="!canSubmit" :loading="busy" @click="plan">
           检查所需依赖

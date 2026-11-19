@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "系统监控",
-    "subtitle": "查看 CPU、内存、磁盘与服务状态",
     "nav": true,
     "order": 1,
     "symbol": "▥",
@@ -449,9 +448,6 @@ useLiveRefresh(
       {{ historyError }}
     </n-alert>
     <MetricTrend :history="history" :unit="unit" />
-    <p class="muted">
-      {{ history?.notice ?? "缺失值显示为空，采样空档不连接。" }}
-    </p>
   </section>
   <n-alert
     v-for="warning in latest?.sample?.warnings ?? []"

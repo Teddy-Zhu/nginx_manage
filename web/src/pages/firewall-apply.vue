@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "应用防火墙规则",
-    "subtitle": "应用变更并确认连接正常",
     "nav": false,
     "localOnly": true,
     "order": 0.72,

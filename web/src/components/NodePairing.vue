@@ -257,9 +257,6 @@ onUnmounted(() => {
             autocomplete="off"
           />
         </NFormItem>
-        <p class="section-note full-width">
-          使用目标服务器生成的配对信息，在有效期内完成连接。
-        </p>
       </div>
     </FormDialog>
     <FormDialog
@@ -322,8 +319,7 @@ onUnmounted(() => {
           />
         </NFormItem>
         <p class="section-note full-width">
-          配对信息 5
-          分钟内有效，仅展示一次。授权默认只读；允许来源按目标实际直连地址匹配，经网关时填写网关来源。
+          配对码 5 分钟内有效，仅显示一次。默认授予读取权限。经网关连接时，请将网关地址填入允许来源。
         </p>
       </div>
     </FormDialog>

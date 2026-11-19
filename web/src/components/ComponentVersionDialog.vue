@@ -288,7 +288,7 @@ onBeforeUnmount(() => controller?.abort());
           }}
         </NAlert>
         <NAlert v-if="channel === 'beta'" type="info">
-          Beta 版本用于体验新功能，建议先备份重要配置。
+          Beta 版本可能不稳定，更新前请备份重要配置。
         </NAlert>
         <NSpin :show="reading">
           <NRadioGroup

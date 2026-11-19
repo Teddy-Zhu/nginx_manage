@@ -8,7 +8,6 @@ declare module "vue-router" {
     public?: boolean;
     localOnly?: boolean;
     title?: string;
-    subtitle?: string;
     nav?: boolean;
     order?: number;
     symbol?: string;

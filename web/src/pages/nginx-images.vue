@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "更新 Nginx",
-    "subtitle": "更新 Nginx 运行镜像",
     "nav": false,
     "order": 7.25,
     "symbol": "◇",
@@ -418,11 +417,8 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
           组件 {{ currentVersion.version }}
         </span>
       </div>
-      <p class="muted">
-        检查并准备签名镜像，确认后即可应用更新。网站配置与证书会保留。
-      </p>
       <NAlert type="info">
-        更新期间网站服务会短暂中断，失败时将尝试恢复原版本。
+        更新期间网站会短暂中断，网站配置和证书会保留。
       </NAlert>
       <div class="button-row">
         <NButton
@@ -435,7 +431,7 @@ useLiveRefresh(api, ["tasks"], load, () => reading.value);
         </NButton>
       </div>
       <p v-if="channel === 'beta'" class="muted">
-        Beta 版本用于提前体验新功能，可能存在尚未修复的问题。
+        Beta 版本可能不稳定。
       </p>
       <NAlert v-if="last?.error" type="error">
         {{ last.error }}

@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "备份与恢复",
-    "subtitle": "备份系统数据，或从备份恢复",
     "nav": true,
     "localOnly": true,
     "order": 50,

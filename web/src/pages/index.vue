@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "系统概览",
-    "subtitle": "查看服务器状态与常用功能",
     "nav": true,
     "order": 0,
     "symbol": "◫",

@@ -95,35 +95,6 @@ function destination(path: string) {
   padding-top: 8px;
   flex-wrap: wrap;
 }
-.certificate-workspace .cert-workflow {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  counter-reset: cert-step;
-}
-.certificate-workspace .cert-workflow li {
-  display: flex;
-  gap: 12px;
-  counter-increment: cert-step;
-}
-.certificate-workspace .cert-workflow li::before {
-  content: counter(cert-step);
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #e9f5ef;
-  color: #087f68;
-  font-weight: 600;
-}
-.certificate-workspace .cert-workflow p {
-  margin-top: 4px;
-}
 .certificate-workspace .cert-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -156,7 +127,6 @@ function destination(path: string) {
     padding: 10px 12px;
   }
   .certificate-workspace .cert-form-grid,
-  .certificate-workspace .cert-workflow,
   .certificate-workspace .cert-stats {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;

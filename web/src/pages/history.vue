@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "清理存储",
-    "subtitle": "清理不再使用的历史文件",
     "nav": false,
     "order": 5.2,
     "symbol": "◷",

@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "FRP 服务端",
-    "subtitle": "管理客户端连接、端口映射和网站转发",
     "nav": true,
     "order": 21,
     "symbol": "⇄",

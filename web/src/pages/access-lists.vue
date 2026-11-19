@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "网站黑白名单",
-    "subtitle": "管理网站的 IP 与国家黑白名单",
     "nav": true,
     "order": 12,
     "symbol": "◈",

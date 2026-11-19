@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "容器管理",
-    "subtitle": "管理 Docker 容器，查看运行状态与日志",
     "nav": true,
     "order": 41,
     "symbol": "▦",

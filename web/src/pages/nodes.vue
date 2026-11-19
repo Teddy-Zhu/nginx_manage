@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "远程服务管理",
-    "subtitle": "管理远程服务器、连接授权与管理目标切换",
     "nav": true,
     "localOnly": true,
     "order": 43,

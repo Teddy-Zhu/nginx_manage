@@ -34,10 +34,8 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <div class="login-decoration">
+    <div class="login-decoration" aria-hidden="true">
       <span class="brand-mark large">N</span>
-      <h1>让配置<br />清晰可控。</h1>
-      <p>代理、配置与服务器，统一管理。</p>
       <div class="decoration-grid" />
     </div>
     <div class="login-panel">
@@ -45,13 +43,9 @@ async function submit() {
         <div class="eyebrow">
           NGINXPANEL
         </div>
-        <h1>{{ bootstrap ? "初始化管理员" : "欢迎回来" }}</h1>
-        <p class="muted">
-          {{
-            bootstrap
-              ? "使用安装时生成的一次性令牌设置账户。"
-              : "登录以管理当前节点。"
-          }}
+        <h1>{{ bootstrap ? "初始化管理员" : "登录" }}</h1>
+        <p v-if="bootstrap" class="muted">
+          使用安装时生成的一次性令牌创建管理员账户。
         </p>
         <n-alert
           v-if="!session.me"
@@ -104,9 +98,6 @@ async function submit() {
             <span style="margin-left: auto">→</span>
           </n-button>
         </n-form>
-        <p class="login-note">
-          仅一个管理员账户 · 凭据由当前节点保管
-        </p>
       </div>
     </div>
   </div>

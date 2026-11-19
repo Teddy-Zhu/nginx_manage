@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "网站管理",
-    "subtitle": "管理网站、反向代理、端口转发与 HTTPS",
     "nav": true,
     "order": 10,
     "symbol": "⌘",

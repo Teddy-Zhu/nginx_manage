@@ -201,13 +201,12 @@ watch(show, (visible) => {
     :close-on-esc="!busy"
   >
     <div class="toolbar">
-      <span class="muted">仅检查专用受管实例的发布目录</span><n-button :loading="busy" @click="load">
+      <n-button :loading="busy" @click="load">
         重新检查
       </n-button>
     </div>
     <n-alert type="info" :bordered="false" style="margin-bottom: 16px">
-      差异基于磁盘副本，不代表这些内容已经被 Nginx
-      加载。载入编辑区后需检查并保存；恢复会发布已保存的配置并重新加载。损坏的证书或模块须选择有效的新版本并保存，或由本机管理员修复。
+      以下是磁盘上的文件差异。载入文件后，请检查并保存配置。
     </n-alert>
     <template v-if="snapshot">
       <n-alert
@@ -300,7 +299,7 @@ watch(show, (visible) => {
       <section v-if="!snapshot.integrity" class="restore-section">
         <h3>恢复受管配置</h3>
         <p class="muted">
-          将恢复为面板中已保存的配置。请先查看它与已生效配置的差异；原外部副本会保留，恢复后若无法确认运行结果，将暂停后续配置操作。
+          恢复会重新加载面板中已保存的配置，并保留外部修改的副本。
         </p>
         <n-alert v-if="!tree?.revision_id" type="warning" :bordered="false">
           请先保存有效配置。

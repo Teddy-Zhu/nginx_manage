@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "登录防护",
-    "subtitle": "自动封禁多次认证失败的 IP",
     "nav": true,
     "order": 31,
     "symbol": "◈",

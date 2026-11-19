@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "防火墙状态",
-    "subtitle": "查看规则状态与连接保护",
     "nav": false,
     "parent": "/firewall-rules"
   }

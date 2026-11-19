@@ -57,28 +57,39 @@ const ceiling = computed(() =>
 );
 const x = (i: number) => 56 + (i / Math.max(1, points.value.length - 1)) * 860;
 const y = (v: number) => 200 - (v / ceiling.value) * 176;
-const paths = computed(() => {
-  const paths: string[] = [];
-  let current = "";
-  points.value.forEach((p, i) => {
-    if (p.average === null || p.gap) {
-      if (current) paths.push(current);
-      current = "";
-      return;
-    }
-    current += `${current ? " L" : "M"}${x(i)},${y(p.average)}`;
-  });
-  if (current) paths.push(current);
-  return paths;
-});
-const isolated = computed(() =>
-  points.value
-    .map((point, index) => ({ point, index }))
-    .filter((p) => p.point.average !== null),
+const samples = computed(() =>
+  points.value.flatMap(({ average }, index) =>
+    average === null ? [] : [{ average, index }],
+  ),
 );
+const path = computed(() => {
+  let line = "";
+  let previousIndex = -1;
+  for (const { average, index } of samples.value) {
+    const horizontal = x(index);
+    const vertical = y(average);
+    if (previousIndex < 0) {
+      line = `M${horizontal},${vertical}`;
+    } else if (index > previousIndex + 1) {
+      line += ` H${horizontal} V${vertical}`;
+    } else {
+      line += ` L${horizontal},${vertical}`;
+    }
+    previousIndex = index;
+  }
+  const lastIndex = points.value.length - 1;
+  if (line && previousIndex < lastIndex) line += ` H${x(lastIndex)}`;
+  return line;
+});
 const active = computed(() =>
   selected.value === null ? undefined : points.value[selected.value],
 );
+function sampleStatus(point: MonitoringPoint, index: number) {
+  if (point.average !== null) return point.gap ? "采样不完整" : "";
+  return index > (samples.value[0]?.index ?? index)
+    ? "沿用上次采样值"
+    : "暂无采样";
+}
 const format = (v: number | null | undefined) =>
   v === null || v === undefined
     ? "—"
@@ -90,10 +101,10 @@ const time = (p: MonitoringPoint | undefined) =>
 <template>
   <div class="metric-trend">
     <svg
-      v-if="points.some((p) => p.average !== null)"
+      v-if="path"
       viewBox="0 0 940 244"
       role="img"
-      :aria-label="`资源趋势，单位 ${unit}，空档不连接`"
+      :aria-label="`资源趋势，单位 ${unit}`"
     >
       <g v-for="fraction in [0, 0.5, 1]" :key="fraction" class="grid">
         <line
@@ -106,12 +117,12 @@ const time = (p: MonitoringPoint | undefined) =>
           {{ format(fraction * ceiling) }}
         </text>
       </g>
-      <path v-for="(path, i) in paths" :key="i" :d="path" class="trend-line" />
+      <path :d="path" class="trend-line" />
       <circle
-        v-for="p in isolated"
-        :key="p.index"
-        :cx="x(p.index)"
-        :cy="y(p.point.average!)"
+        v-for="sample in samples"
+        :key="sample.index"
+        :cx="x(sample.index)"
+        :cy="y(sample.average)"
         r="2.5"
         class="trend-dot"
       />
@@ -124,7 +135,13 @@ const time = (p: MonitoringPoint | undefined) =>
         height="190"
         fill="transparent"
         tabindex="0"
-        :aria-label="`${time(point)}，${format(point.average)} ${unit}${point.gap ? '，含采样空档' : ''}`"
+        :aria-label="
+          [
+            time(point),
+            point.average === null ? '' : `${format(point.average)} ${unit}`,
+            sampleStatus(point, i),
+          ].filter(Boolean).join('，')
+        "
         @mouseenter="selected = i"
         @focus="selected = i"
         @mouseleave="selected = null"
@@ -147,15 +164,16 @@ const time = (p: MonitoringPoint | undefined) =>
       所选时段暂无有效样本
     </div>
     <div class="muted trend-detail" aria-live="polite">
-      <template v-if="active">
-        {{ time(active) }} · 均值 {{ format(active.average) }} {{ unit }} ·
-        最小 {{ format(active.minimum) }} · 最大 {{ format(active.maximum) }} ·
-        {{ active.count }} 个样本{{
-          active.gap ? " · 含采样空档" : ""
-        }}
-      </template>
-      <template v-else>
-        移动指针或聚焦数据点查看详情
+      <template v-if="active && selected !== null">
+        {{ time(active) }}
+        <template v-if="active.average !== null">
+          · 均值 {{ format(active.average) }} {{ unit }} · 最小
+          {{ format(active.minimum) }} · 最大 {{ format(active.maximum) }} ·
+          {{ active.count }} 个样本
+        </template>
+        <template v-if="active.gap">
+          · {{ sampleStatus(active, selected) }}
+        </template>
       </template>
     </div>
   </div>

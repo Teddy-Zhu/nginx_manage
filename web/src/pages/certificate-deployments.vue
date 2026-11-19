@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "网站证书",
-    "subtitle": "更新网站使用的 SSL 证书",
     "nav": false,
     "parent": "/certificates",
     "software": "nginx"
@@ -176,9 +175,6 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
     <div class="cert-heading">
       <div>
         <h2>网站证书</h2>
-        <p class="muted">
-          查看网站正在使用的证书，并将续期后的证书更新到网站。
-        </p>
       </div>
       <n-button :loading="busy" @click="load">
         刷新
@@ -187,9 +183,6 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
     <section class="surface cert-section">
       <div>
         <h2>选择证书</h2>
-        <p class="muted">
-          首次使用请在网站设置中选择证书；已有网站可在这里更新。
-        </p>
       </div>
       <n-select
         :value="selected || null"
@@ -252,9 +245,6 @@ useLiveRefresh(api, ["tasks"], load, () => busy.value || !!preview.value);
           </div>
         </template>
         <template v-else>
-          <p class="muted">
-            更新会同步替换使用此证书的网站配置，完成后请检查网站访问结果。
-          </p>
           <div class="cert-actions">
             <n-button
               v-if="status.state !== 'applied'"

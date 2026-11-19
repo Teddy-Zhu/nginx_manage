@@ -58,10 +58,6 @@ onUnmounted(() => {
         刷新记录
       </NButton>
     </div>
-    <NAlert type="info">
-      显示最近 20 条登录失败记录。启用防护规则后，可自动封禁多次登录失败的
-      IP。
-    </NAlert>
     <NAlert v-if="error" type="error">
       {{ error }}
     </NAlert>

@@ -302,11 +302,6 @@ h3 {
   gap: 6px;
 }
 .shortcut-grid a:hover { border-color: #087f68; background: #f5faf7; }
-.page-heading p {
-  color: var(--text-muted);
-  font-size: 13px;
-  margin: 0;
-}
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -631,6 +626,7 @@ input[type="datetime-local"]:focus-visible {
   padding: 70px 12%;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
 }
 .brand-mark.large {
@@ -639,22 +635,6 @@ input[type="datetime-local"]:focus-visible {
   font-size: 43px;
   background: #75d2a8;
   color: #113d31;
-  margin-bottom: 55px;
-}
-.login-decoration h1 {
-  font-size: 48px;
-  line-height: 1.35;
-  font-weight: 500;
-  letter-spacing: -1px;
-  position: relative;
-  z-index: 1;
-}
-.login-decoration p {
-  font-size: 14px;
-  color: #a0c1b3;
-  margin-top: 26px;
-  position: relative;
-  z-index: 1;
 }
 .decoration-grid {
   position: absolute;
@@ -680,12 +660,6 @@ input[type="datetime-local"]:focus-visible {
   margin-bottom: 12px;
   font-size: 28px;
 }
-.login-note {
-  color: #a2aaa5;
-  font-size: 11px;
-  text-align: center;
-  margin-top: 35px;
-}
 @media (max-width: 1100px) {
   .sidebar {
     width: 200px;
@@ -704,9 +678,6 @@ input[type="datetime-local"]:focus-visible {
   }
   .two-columns {
     grid-template-columns: 1fr;
-  }
-  .login-decoration h1 {
-    font-size: 38px;
   }
   .editor-layout {
     grid-template-columns: 175px minmax(0, 1fr);

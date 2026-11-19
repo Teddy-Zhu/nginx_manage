@@ -59,10 +59,7 @@ const flag = (value: boolean | null) =>
     {{ inventory.reason }}
   </n-alert>
   <template v-else>
-    <p class="muted">
-      运行与永久配置分别读取。摘要比较仅针对返回配置，不证明内核规则一致或外部可达。
-    </p>
-    <n-empty v-if="!inventory.policies.length" description="未观察到 policy" />
+    <n-empty v-if="!inventory.policies.length" description="暂无策略" />
     <n-collapse v-else>
       <n-collapse-item
         v-for="policy in inventory.policies"

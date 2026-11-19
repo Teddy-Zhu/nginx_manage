@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "日志管理",
-    "subtitle": "查询网站访问、系统与操作日志",
     "nav": true,
     "order": 41,
     "symbol": "▤",
@@ -522,7 +521,7 @@ onUnmounted(reset);
   >
     <template v-if="policy && policyInput">
       <n-alert type="info" :bordered="false">
-        按大小或保留时间自动整理日志。只清理已结束写入的历史日志，当前日志可能暂时超过限额。
+        轮转设置只清理历史日志。当前日志可能暂时超过限额。
       </n-alert>
       <n-alert v-if="!policy.editable" type="warning" :bordered="false">
         {{

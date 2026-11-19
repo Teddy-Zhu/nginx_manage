@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "证书管理",
-    "subtitle": "管理证书、申请和自动续期",
     "nav": true,
     "order": 11,
     "symbol": "▱",
@@ -69,22 +68,6 @@ const dirty = computed(
 const version = computed(() =>
   selected.value ? latest(selected.value) : undefined,
 );
-const activeBindings = computed(() => {
-  const seen = new Set<string>();
-  return (
-    selected.value?.bindings.filter((binding) => {
-      const key = JSON.stringify([
-        binding.version_id,
-        binding.revision_id,
-        binding.resource_id,
-        binding.file_id,
-      ]);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }) ?? []
-  );
-});
 function latest(item: Certificate) {
   return item.versions.find((value) => value.id === item.latest_version_id);
 }
@@ -303,34 +286,6 @@ onUnmounted(() => {
 
 <template>
   <CertificateWorkspace>
-    <section class="surface">
-      <ol class="cert-workflow">
-        <li>
-          <div>
-            <h2>获取证书</h2>
-            <p class="muted">
-              自动申请，或导入已有证书。
-            </p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h2>用于网站</h2>
-            <p class="muted">
-              在网站设置中选择证书，保存并应用。
-            </p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h2>续期与更新</h2>
-            <p class="muted">
-              自动申请的证书可开启续期，导入的证书需手动更新。
-            </p>
-          </div>
-        </li>
-      </ol>
-    </section>
     <section class="surface cert-section">
       <div class="cert-heading">
         <div>
@@ -471,13 +426,6 @@ onUnmounted(() => {
           </div>
         </div>
       </template>
-      <p class="muted">
-        {{
-          activeBindings.length
-            ? "此证书已有网站使用，可在“网站证书”查看生效情况并更新。"
-            : "此证书尚未用于网站，点击“用于网站”继续。"
-        }}
-      </p>
       <p
         v-if="selected.bindings.length || selected.historical_references"
         class="muted"

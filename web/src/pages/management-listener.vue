@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "安全管理入口",
-    "subtitle": "设置网络变更的连接确认入口",
     "nav": false,
     "localOnly": true,
     "order": 8.5,

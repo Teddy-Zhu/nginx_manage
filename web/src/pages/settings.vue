@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "面板设置",
-    "subtitle": "管理账户、访问入口与系统更新",
     "nav": true,
     "localOnly": true,
     "order": 53,

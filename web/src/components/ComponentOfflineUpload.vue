@@ -237,7 +237,7 @@ async function upload() {
           (item) => item.id === asset.id,
         )?.received;
         if (result.id !== id || received === undefined || received < end)
-          throw new Error("上传回执未确认完整分块，请刷新进度后继续");
+          throw new Error("上传进度未确认，请刷新后继续");
         save(result);
         offset = received;
       }
@@ -338,7 +338,7 @@ onUnmounted(() => {
       </NButton>
     </div>
     <p>
-      上传发布清单、签名及原始归档。接收完成后检查目标依赖，并在软件商店区确认准备。
+      选择发布清单、签名和安装包。
     </p>
     <NAlert v-if="!available" type="warning">
       离线接收器当前不可用。
@@ -402,7 +402,7 @@ onUnmounted(() => {
       "
       @click="start"
     >
-      {{ pendingStart ? "重试原清单请求" : "验签并创建上传" }}
+      {{ pendingStart ? "重试创建上传" : "创建上传" }}
     </NButton>
     <NAlert v-if="error" type="error">
       {{ error }}
@@ -463,7 +463,7 @@ onUnmounted(() => {
           "
           @click="check"
         >
-          {{ pendingCheck ? "重试原检查请求" : "检查目标依赖" }}
+          {{ pendingCheck ? "重新检查" : "检查安装条件" }}
         </NButton>
         <NPopconfirm
           :disabled="!canClear || !!pendingStart || !!pendingCheck"
@@ -481,7 +481,7 @@ onUnmounted(() => {
         {{ uploading ? "正在暂停上传…" : "上传已暂停，可按保存进度继续。" }}
       </p>
       <p v-if="chosen.complete">
-        字节接收完成；归档散列与内容将在确认准备时核对。
+        上传完成，等待校验。
       </p>
     </section>
   </section>

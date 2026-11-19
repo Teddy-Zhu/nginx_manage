@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "防火墙",
-    "subtitle": "管理端口和 IP 黑白名单",
     "nav": true,
     "order": 30,
     "symbol": "≡",

@@ -67,7 +67,7 @@ const syncStates: Record<string, string> = {
   stopping: "正在停用",
   paused: "已暂停",
   failed: "同步失败",
-  recovery_required: "原事务待核对",
+  recovery_required: "需要恢复",
   recovering: "正在恢复启动范围",
 };
 async function load() {
@@ -329,13 +329,9 @@ onUnmounted(() => {
       </NDescriptions>
       <template v-if="view.can_prepare">
         <p class="muted">
-          候选计划包含 {{ view.sources.banned_count }} 个封禁地址、
-          {{ view.protected_sources.length }} 项本地、管理与代理来源保护、{{
-            view.generated_rules
-          }}
-          条规则，事务
-          {{ view.transaction_bytes }}
-          字节。本次候选计划尚未提交，当前规则另见运行状态。
+          预览包含 {{ view.sources.banned_count }} 个封禁地址、
+          {{ view.protected_sources.length }} 项来源保护和
+          {{ view.generated_rules }} 条规则。
         </p>
         <details>
           <summary>查看保护来源</summary>

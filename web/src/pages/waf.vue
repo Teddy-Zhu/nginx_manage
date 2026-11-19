@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "网站防护",
-    "subtitle": "设置访问限流和基础攻击防护",
     "nav": true,
     "order": 13,
     "symbol": "◇",

@@ -184,7 +184,7 @@ const columns: DataTableColumns<Binding> = [
     {{ plan.reason }}
   </n-alert>
   <p class="muted">
-    选择规则对应的容器端口和访问地址。此关联仅用于本次变更。
+    选择要保护的容器端口和访问地址。
   </p>
   <n-space class="notice">
     <n-button :disabled="disabled" @click="emit('reload')">
@@ -233,7 +233,7 @@ const columns: DataTableColumns<Binding> = [
     没有匹配的容器端口，请检查容器是否运行并开放了对应端口。
   </p>
   <p v-if="mapping !== null && !addressOptions.length" class="muted">
-    没有与该映射对应的本机入口地址，请核对接口及固定或通配绑定。
+    找不到此端口映射的本机访问地址，请检查端口绑定。
   </p>
   <n-data-table
     :columns="columns"

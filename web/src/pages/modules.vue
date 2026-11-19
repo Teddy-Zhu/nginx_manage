@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "功能开关",
-    "subtitle": "开启或关闭可选功能",
     "nav": false,
     "order": 6.1,
     "symbol": "◈",

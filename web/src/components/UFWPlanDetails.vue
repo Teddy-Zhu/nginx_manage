@@ -102,7 +102,7 @@ const columns: DataTableColumns<Entry> = [
     :scroll-x="900"
   />
   <p v-if="plan.truncated" class="muted">
-    仅展示前 128 条；命令计数和程序摘要覆盖完整配置。
+    仅显示前 128 条命令。
   </p>
 </template>
 

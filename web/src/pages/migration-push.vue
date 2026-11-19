@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "迁出到节点",
-    "subtitle": "将配置迁移到其他服务器",
     "nav": false,
     "order": 7.1,
     "symbol": "↗",

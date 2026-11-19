@@ -227,7 +227,7 @@ onUnmounted(stop);
   >
     <div class="operation-dialog-body page-stack">
       <NAlert v-if="currentOperation?.submitting" type="info">
-        <NSpin size="small" /> 正在提交操作，请稍候…
+        <NSpin size="small" /> 正在提交
       </NAlert>
       <NAlert
         v-if="currentOperation?.error"
@@ -272,15 +272,12 @@ onUnmounted(stop);
             提交时间：{{ date(task.created_at)
             }}<span v-if="elapsed"> · 已用时 {{ elapsed }}</span>
           </p>
-          <p v-if="active" class="muted">
-            任务正在后台执行，进度和日志将自动更新。
-          </p>
           <p v-if="needsAttention">
             请返回原操作页面确认或恢复任务。
           </p>
         </div>
         <NAlert v-if="statusError" type="warning" title="暂时无法读取任务状态">
-          {{ statusError }}。任务可能仍在执行，请刷新后确认。
+          {{ statusError }}
         </NAlert>
         <NAlert
           v-if="task?.last_error"
@@ -305,11 +302,7 @@ onUnmounted(stop);
           v-else-if="!rows.length && !softwareLog && !softwareMessage"
           class="muted"
         >
-          {{
-            active
-              ? "等待执行日志，稍后自动更新…"
-              : "最近七天内暂无可读取的执行日志。"
-          }}
+          {{ active ? "暂无执行日志" : "最近七天暂无执行日志" }}
         </p>
         <ol v-if="rows.length" class="operation-log" aria-label="执行日志">
           <li

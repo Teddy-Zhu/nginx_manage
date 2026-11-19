@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "操作记录",
-    "subtitle": "查看任务进度、执行结果与操作历史",
     "nav": true,
     "order": 42,
     "symbol": "☷",

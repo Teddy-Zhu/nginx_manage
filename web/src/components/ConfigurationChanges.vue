@@ -111,9 +111,6 @@ function resourceName(id: string) {
         比较
       </n-button>
     </div>
-    <p class="muted">
-      与当前编辑的配置内容比较。
-    </p>
     <template v-if="difference">
       <n-alert
         v-if="difference.diagnostics.length"
@@ -121,9 +118,9 @@ function resourceName(id: string) {
         :bordered="false"
         style="margin-bottom: 16px"
       >
-        目标原文存在
+        目标配置有
         {{ difference.diagnostics.length }}
-        项解析或映射诊断。差异查看不会保存或应用配置。
+        项解析或映射问题。
       </n-alert>
       <n-select
         v-if="fileOptions.length"

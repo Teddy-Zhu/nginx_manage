@@ -2,7 +2,6 @@
 {
   "meta": {
     "title": "配置迁移",
-    "subtitle": "在服务器之间导出、导入配置",
     "nav": true,
     "order": 51,
     "symbol": "⇄",
@@ -508,16 +507,12 @@ useLiveRefresh(api, ["tasks"], () => {
 <template>
   <div class="page-stack">
     <div class="toolbar">
-      <p class="muted">
-        导出本机配置，或从配置包、其他服务器迁入。
-      </p>
       <RouterLink to="/migration-push">
         迁移到其他服务器 →
       </RouterLink>
     </div>
     <NAlert type="info">
-      导入前会检查目标环境与所需软件。保存或应用迁入配置将替换目标 Nginx
-      配置，请先备份。
+      保存或应用迁入配置将替换目标 Nginx 配置，请先备份。
     </NAlert>
     <NAlert v-if="error" type="error">
       {{ error }}
@@ -526,9 +521,6 @@ useLiveRefresh(api, ["tasks"], () => {
       <NTabs v-model:value="transferTab" type="line" animated>
         <NTabPane v-if="canExport" name="export" tab="导出配置">
           <div class="page-stack">
-            <p class="muted">
-              选择配置包类型后下载到本机。
-            </p>
             <NFormItem label="配置包类型">
               <NSelect
                 v-model:value="exportMode"
@@ -775,7 +767,7 @@ useLiveRefresh(api, ["tasks"], () => {
             @update:valid="firewallValid = $event"
           />
           <p class="muted">
-            环境映射修改后，请重新预检。
+            修改目标映射后，请重新检查。
           </p>
         </div>
       </section>
